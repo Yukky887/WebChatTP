@@ -1,0 +1,161 @@
+@import './variables.css';
+
+/* ==================== АДМИНКА ==================== */
+.admin-container {
+  min-height: 100vh;
+  background-color: var(--color-bg);
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.admin-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-bold);
+}
+
+/* ==================== КАРТОЧКИ ==================== */
+.admin-card {
+  margin-bottom: var(--spacing-lg);
+  border-radius: var(--radius-lg);
+}
+
+.admin-card-header {
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.admin-card-content {
+  padding: var(--spacing-md);
+}
+
+/* ==================== СЛАЙДЕРЫ ==================== */
+.slider-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+}
+
+.slider-item {
+  flex: 1 1 300px;
+}
+
+/* ==================== ЧИСЛОВЫЕ ПОЛЯ ==================== */
+.number-fields-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+
+.number-field {
+  flex: 1 1 150px;
+}
+
+/* ==================== ПРОВАЙДЕРЫ ==================== */
+.provider-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  transition: all var(--transition-fast) var(--ease-in-out);
+}
+
+.provider-card-disabled {
+  background-color: var(--color-bg);
+  opacity: 0.7;
+}
+
+.provider-card-enabled {
+  background-color: var(--color-white);
+}
+
+.provider-info {
+  flex: 1;
+}
+
+.provider-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+/* ==================== МОДЕЛИ ==================== */
+.models-container {
+  margin-bottom: var(--spacing-md);
+}
+
+.model-group {
+  margin-bottom: var(--spacing-md);
+  padding-left: var(--spacing-sm);
+}
+
+.model-group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.model-chip {
+  max-width: 400px;
+  cursor: pointer;
+  transition: opacity var(--transition-fast) var(--ease-in-out);
+}
+
+.model-chip-allowed {
+  opacity: 1;
+}
+
+.model-chip-blocked {
+  opacity: 0.5;
+}
+
+.model-chip:hover {
+  opacity: 1;
+}
+
+/* ==================== ЛОГИН ==================== */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: var(--color-bg);
+}
+
+.login-card {
+  max-width: 400px;
+  width: 100%;
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  background-color: var(--color-white);
+}
+
+.login-icon {
+  font-size: 48px;
+  color: var(--color-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+/* ==================== ДИАЛОГИ ==================== */
+.dialog-content {
+  padding: var(--spacing-md);
+  min-width: 300px;
+}

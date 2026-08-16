@@ -1,0 +1,6 @@
+venv/
+frontend/venv/
+*.venv/
+venv/
+frontend/venv/
+*.venv/
