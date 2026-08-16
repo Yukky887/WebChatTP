@@ -1,16 +1,17 @@
 from sentence_transformers import SentenceTransformer
 import httpx
 from typing import List
-from config import EMBEDDING_DOCS_MODEL, EMBEDDING_TICKETS
+from config import EMBEDDING_DOCS_MODEL, EMBEDDING_TICKETS, ROUTERAI_URL
 
-# Модель для документации (локальная, 768d)
+# Модель для документации
 docs_model = SentenceTransformer(EMBEDDING_DOCS_MODEL)
 
-# HTTP клиент для эмбеддингов заявок (RouterAI)
+# HTTP клиент для эмбеддингов заявок
 ticket_client = httpx.AsyncClient(
-    base_url="https://routerai.ru/api/v1",
+    base_url=ROUTERAI_URL,
     timeout=30.0,
     headers={"Authorization": f"Bearer {EMBEDDING_TICKETS['api_key']}"}
+    if EMBEDDING_TICKETS.get("api_key") else None
 )
 
 def get_docs_embedding(text: str) -> List[float]:

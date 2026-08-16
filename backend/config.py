@@ -1,8 +1,17 @@
-from typing import List, Dict
+import os
+from typing import List
+from dotenv import load_dotenv
+
+# Загружаем .env
+load_dotenv()
+
+def get_env(key: str, default: str = "") -> str:
+    """Получает значение из .env с fallback"""
+    return os.getenv(key, default)
 
 # ==================== БАЗЫ ДАННЫХ ====================
-WEAVIATE_URL = "http://192.168.128.123:6789"
-QDRANT_URL = "http://192.168.128.123:6333"
+WEAVIATE_URL = get_env("WEAVIATE_URL", "http://192.168.128.123:6789")
+QDRANT_URL = get_env("QDRANT_URL", "http://192.168.128.123:6333")
 
 # Коллекции Qdrant
 QDRANT_COLLECTIONS = {
@@ -18,36 +27,41 @@ SEARCH_LIMITS = {
 }
 
 # ==================== ЭМБЕДДИНГИ ====================
-EMBEDDING_DOCS_MODEL = "intfloat/multilingual-e5-base"
+EMBEDDING_DOCS_MODEL = get_env("EMBEDDING_DOCS_MODEL", "intfloat/multilingual-e5-base")
 
 EMBEDDING_TICKETS = {
-    "model": "qwen/qwen3-embedding-4b",
-    "endpoint": "https://routerai.ru/api/v1/embeddings",
-    "api_key": "sk-LqDGeEaYU0vMmTXqkoirJpNCnNltXEPi",
+    "model": get_env("EMBEDDING_TICKETS_MODEL", "qwen/qwen3-embedding-4b"),
+    "endpoint": f"{get_env('ROUTERAI_URL', 'https://routerai.ru/api/v1')}/embeddings",
+    "api_key": get_env("ROUTERAI_API_KEY", ""),
     "dimension": 2560
 }
 
 # ==================== LLM ПРОВАЙДЕРЫ ====================
+OLLAMA_URL = get_env("OLLAMA_URL", "http://192.168.128.123:6790")
+LLAMACPP_URL = get_env("LLAMACPP_URL", "http://192.168.0.254:8080/v1")
+ROUTERAI_URL = get_env("ROUTERAI_URL", "https://routerai.ru/api/v1")
+ROUTERAI_API_KEY = get_env("ROUTERAI_API_KEY", "")
+
 LLM_PROVIDERS = {
     "ollama": {
         "name": "Ollama (локальный)",
-        "base_url": "http://192.168.128.123:6790",
+        "base_url": OLLAMA_URL,
         "api_type": "ollama",
         "models": [],
         "enabled": False,
     },
     "llamacpp": {
         "name": "llama.cpp (Gemma)",
-        "base_url": "http://192.168.0.254:8080/v1",
+        "base_url": LLAMACPP_URL,
         "api_type": "openai",
         "models": [],
         "enabled": False
     },
     "routerai": {
         "name": "RouterAI (облачный)",
-        "base_url": "https://routerai.ru/api/v1",
+        "base_url": ROUTERAI_URL,
         "api_type": "openai",
-        "api_key": "sk-LqDGeEaYU0vMmTXqkoirJpNCnNltXEPi",
+        "api_key": ROUTERAI_API_KEY,
         "models": [],
         "enabled": False,
     }
@@ -60,7 +74,7 @@ DEFAULT_LLM_SETTINGS = {
     "top_p": 0.9,
     "repeat_penalty": 1.1,
     "num_ctx": 8192,
-    "system_prompt_template": """Ты - ассистент по Parts.Intellect и Parts.Resource. Отвечай на русском.
+    "system_prompt_template": """Ты - ассистент по Parts.Intellect. Отвечай на русском.
 
 КОНТЕКСТ ({sources_count} источников, {total_chars} символов):
 {context_text}
@@ -71,14 +85,14 @@ DEFAULT_LLM_SETTINGS = {
 3. Указывай источники в формате [1], [2]
 
 УТОЧНЯЮЩИЕ ВОПРОСЫ:
-- Если информации недостаточно - задай вопрос: "Уточните: ..."
+- Если информации недостаточно - задай вопрос: "🤔 Уточните: ..."
 
 ИСТОРИЯ:
 {history}"""
 }
 
 # ==================== АДМИН ====================
-ADMIN_PASSWORD = "admin123"
+ADMIN_PASSWORD = get_env("ADMIN_PASSWORD", "admin123")
 
 # ==================== СОСТОЯНИЕ ====================
 CURRENT_PROVIDER = "ollama"
@@ -86,5 +100,5 @@ CURRENT_MODEL = ""
 ALLOWED_MODELS: List[str] = []
 FAVORITE_MODELS: List[str] = []
 
-# Текущие настройки LLM (меняются через админку)
+# Текущие настройки LLM
 llm_settings = DEFAULT_LLM_SETTINGS.copy()
