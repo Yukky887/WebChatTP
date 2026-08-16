@@ -1,0 +1,86 @@
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+
+# Virtual Environment
+venv/
+env/
+.env
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# ==================== Node.js / React ====================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp/
+.pnp.js
+
+# Build outputs
+frontend/build/
+frontend/dist/
+
+# ==================== IDE ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ==================== Кэши ====================
+.cache/
+*.log
+logs/
+
+# ==================== Данные ====================
+# CSV и JSON с данными (если не хочешь хранить в git)
+# data/
+# *.csv
+# *.json
+
+# Модели HuggingFace
+.cache/huggingface/
+models/
+
+# ==================== Секреты ====================
+# Файлы с секретами
+.env
+.env.local
+.env.*.local
+secrets.py
+config.local.py
+
+# API ключи
+*.key
+*.pem
+
+# ==================== Базы данных ====================
+*.db
+*.sqlite
+*.sqlite3
+
+# ==================== Docker ====================
+docker-compose.override.yml
+.docker/
+
+# ==================== Временные файлы ====================
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
