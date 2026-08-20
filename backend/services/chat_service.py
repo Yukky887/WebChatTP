@@ -2,16 +2,17 @@ from typing import Dict, List, Optional
 import uuid
 from services.search_service import search_all
 from llm_providers import chat_completion
-from config import llm_settings
 
+# Сессии чата
 chat_sessions: Dict[str, Dict] = {}
 
+# Ключевые слова для определения программы
 PROGRAM_KEYWORDS = {
     "intellect": [
-        "parts.intellect", "parts intellect", "интеллект"
+        "parts.intellect"
     ],
     "resource": [
-        "parts.resource", "parts resource", "ресурс"
+        "parts.resource"
     ]
 }
 
@@ -22,23 +23,31 @@ class QuestionClassifier:
         """Определяет программу по ключевым словам"""
         q = question.lower()
         
-        # Явное указание
-        if "parts.intellect" in q or "интеллект" in q:
-            return "intellect"
-        if "parts.resource" in q or "ресурс" in q:
-            return "resource"
-        
         intellect_score = sum(1 for kw in PROGRAM_KEYWORDS["intellect"] if kw in q)
         resource_score = sum(1 for kw in PROGRAM_KEYWORDS["resource"] if kw in q)
         
-        if intellect_score > resource_score and intellect_score >= 1:
+        if intellect_score > resource_score and intellect_score > 0:
             return "intellect"
-        if resource_score > intellect_score and resource_score >= 1:
+        if resource_score > intellect_score and resource_score > 0:
             return "resource"
         
         return None
 
 classifier = QuestionClassifier()
+
+def truncate_content(content: str, max_length: int = 4000) -> str:
+    """Умная обрезка — сохраняет начало и конец"""
+    if len(content) <= max_length:
+        return content
+    
+    first_part = int(max_length * 0.7)  # 70% начала
+    last_part = max_length - first_part  # 30% конца
+    
+    return (
+        content[:first_part]
+        + f"\n\n... [обрезано {len(content) - max_length} симв.] ...\n\n"
+        + content[-last_part:]
+    )
 
 async def process_chat(
     message: str,
@@ -48,13 +57,12 @@ async def process_chat(
     program: Optional[str] = None,
 ) -> Dict:
     """
-    Обрабатывает сообщение чата.
-    
-    Порядок:
-    1. Определяем программу (из аргумента, сессии, или классификатора)
-    2. Если программа не определена — спрашиваем пользователя
-    3. Ищем контекст ТОЛЬКО в нужной коллекции
-    4. Отправляем LLM
+    Вся логика здесь:
+    1. Определяет программу
+    2. Если не определена — запрашивает выбор
+    3. Ищет в нужной коллекции
+    4. Формирует контекст
+    5. Запрашивает LLM
     """
     
     if not session_id:
@@ -63,46 +71,43 @@ async def process_chat(
     if session_id not in chat_sessions:
         chat_sessions[session_id] = {
             "messages": [],
-            "program": None,
+            "last_program": None,
         }
     
     session = chat_sessions[session_id]
     
-    # Шаг 1: Определяем программу
-    detected_program = program or session.get("program") or classifier.classify(message)
+    # ========== ШАГ 1: ОПРЕДЕЛЯЕМ ПРОГРАММУ ==========
+    if program:
+        # Пользователь явно выбрал (кнопка)
+        detected_program = program
+    else:
+        # Классифицируем по словам
+        detected_program = classifier.classify(message)
     
-    # Если программа определена — сохраняем в сессии
-    if detected_program:
-        session["program"] = detected_program
-    
-    # Шаг 2: Если программа не определена — просим уточнить
+    # ========== ШАГ 2: ЕСЛИ НЕ ОПРЕДЕЛИЛИ — СПРАШИВАЕМ ==========
     if not detected_program:
         return {
             "session_id": session_id,
-            "answer": "🤔 Уточните, о какой программе ваш вопрос?",
+            "answer": "",
             "has_questions": True,
             "suggestions": ["Parts.Intellect", "Parts.Resource"],
             "sources": [],
             "provider": provider,
             "model": model,
             "truncated": False,
-            "usage": {},
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0},
             "program": None,
             "needs_program_selection": True
         }
     
-    # Шаг 3: Поиск ТОЛЬКО в нужной коллекции
+    # ========== ШАГ 3: ПОИСК В НУЖНОЙ КОЛЛЕКЦИИ ==========
     print(f"🔍 [{detected_program}] Поиск: {message[:50]}...")
     search_results = await search_all(message, program=detected_program)
     
-    print(f"📊 Всего результатов: {len(search_results)}")
-    for r in search_results:
-        print(f"   - type={r.get('type')}, collection={r.get('collection')}, title={r.get('title', r.get('header', ''))[:50]}")
-
-    tickets = [r for r in search_results if r.get("type") == "ticket"][:5]
-    docs = [r for r in search_results if r.get("type") == "documentation"][:5]
+    tickets = [r for r in search_results if r.get("type") == "ticket"][:10]
+    docs = [r for r in search_results if r.get("type") == "documentation"][:10]
     
-    # Формируем контекст
+    # ========== ШАГ 4: ФОРМИРУЕМ КОНТЕКСТ ==========
     context_parts = []
     sources = []
     
@@ -111,8 +116,8 @@ async def process_chat(
         for i, t in enumerate(tickets):
             context_parts.append(
                 f"[Заявка {i+1}] {t.get('header', '')}\n"
-                f"Q: {t.get('question', '')[:500]}\n"
-                f"A: {t.get('answer', '')[:1500]}"
+                f"Q: {t.get('question', '')[:5000]}\n"
+                f"A: {t.get('answer', '')[:5000]}"
             )
             sources.append({
                 "index": i + 1,
@@ -125,9 +130,10 @@ async def process_chat(
     if docs:
         context_parts.append("\n### 📚 Документация:\n")
         for i, d in enumerate(docs):
+            content = d.get("content", "")
             context_parts.append(
                 f"[Док {i+1}] {d.get('title', '')}\n"
-                f"{d.get('content', '')[:1500]}"
+                f"{truncate_content(content, 15000)}"  # ← Увеличено
             )
             sources.append({
                 "index": len(tickets) + i + 1,
@@ -139,10 +145,12 @@ async def process_chat(
             })
     
     context_text = "\n\n".join(context_parts) if context_parts else "Контекст не найден."
-    
+    print(f"📊 Контекст: {len(context_text)} символов")
+    print(f"   Заявки: {sum(len(t.get('answer', '')) for t in tickets)} симв.")
+    print(f"   Документация: {sum(len(d.get('content', '')) for d in docs)} симв.")
     program_name = "Parts.Intellect" if detected_program == "intellect" else "Parts.Resource"
     
-    # Системный промпт
+    # ========== ШАГ 5: СИСТЕМНЫЙ ПРОМПТ ==========
     system_prompt = f"""Ты - ассистент по {program_name}.
 
 КОНТЕКСТ (только {program_name}):
@@ -158,7 +166,7 @@ async def process_chat(
 {format_history(session["messages"][-6:])}
 """
     
-    # Шаг 4: Запрос к LLM
+    # ========== ШАГ 6: ЗАПРОС К LLM ==========
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(session["messages"][-10:])
     messages.append({"role": "user", "content": message})
@@ -175,7 +183,7 @@ async def process_chat(
     return {
         "session_id": session_id,
         "answer": answer,
-        "has_questions": "🤔" in answer,
+        "has_questions": False,
         "suggestions": [],
         "sources": sources,
         "provider": provider,

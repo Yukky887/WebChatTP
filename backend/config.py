@@ -21,13 +21,13 @@ QDRANT_COLLECTIONS = {
 }
 
 SEARCH_LIMITS = {
-    "tickets": 5,
-    "parts_resource": 5,
-    "parts_intellect": 5
+    "tickets": 1,
+    "parts_resource": 10,
+    "parts_intellect": 10
 }
 
 # ==================== ЭМБЕДДИНГИ ====================
-EMBEDDING_DOCS_MODEL = get_env("EMBEDDING_DOCS_MODEL", "intfloat/multilingual-e5-base")
+EMBEDDING_DOCS_MODEL = get_env("EMBEDDING_DOCS_MODEL", "BAAI/bge-m3")
 
 EMBEDDING_TICKETS = {
     "model": get_env("EMBEDDING_TICKETS_MODEL", "qwen/qwen3-embedding-4b"),
@@ -55,7 +55,7 @@ LLM_PROVIDERS = {
         "base_url": LLAMACPP_URL,
         "api_type": "openai",
         "models": [],
-        "enabled": False
+        "enabled": True
     },
     "routerai": {
         "name": "RouterAI (облачный)",
@@ -70,10 +70,10 @@ LLM_PROVIDERS = {
 # ==================== НАСТРОЙКИ LLM ====================
 DEFAULT_LLM_SETTINGS = {
     "temperature": 0.5,
-    "max_tokens": 8000,
+    "max_tokens": 15000,
     "top_p": 0.9,
     "repeat_penalty": 1.1,
-    "num_ctx": 8192,
+    "num_ctx": 30000,
     "system_prompt_template": """Ты - ассистент по Parts.Intellect. Отвечай на русском.
 
 КОНТЕКСТ ({sources_count} источников, {total_chars} символов):
