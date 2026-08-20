@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Box, Paper, Typography, IconButton, Chip, Tooltip, Avatar,
+  Box, Paper, IconButton, Chip, Tooltip, Avatar,
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -9,8 +9,9 @@ import {
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import { Message } from '../../types';
-import { formatScore, formatTokens, formatCost, formatLength } from '../../utils/formatters';
+import { formatTokens, formatCost } from '../../utils/formatters';
 import { SourceChip } from './SourceChip';
+import { MarkdownRenderer } from '../common/MarkdownRenderer';
 
 interface MessageBubbleProps {
   message: Message;
@@ -33,14 +34,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         </Avatar>
       )}
 
-      <Box sx={{ maxWidth: '80%' }}>
+      <Box sx={{ maxWidth: '85%' }}>
         <Paper
           className={`message-bubble ${isUser ? 'message-bubble-user' : 'message-bubble-assistant'}`}
           elevation={isUser ? 0 : 1}
         >
-          <Typography variant="body1" className="message-content">
-            {message.content}
-          </Typography>
+          <Box className="message-content">
+            {isUser ? (
+              <Box component="span" sx={{ whiteSpace: 'pre-wrap' }}>
+                {message.content}
+              </Box>
+            ) : (
+              <MarkdownRenderer content={message.content} />
+            )}
+          </Box>
 
           {!isUser && (
             <Box className="message-actions">
@@ -56,7 +63,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         {/* Метрики */}
         {!isUser && message.usage && (
           <Box className="message-meta">
-            <Tooltip title={`Токены: ${formatTokens(message.usage.prompt_tokens)} вх + ${formatTokens(message.usage.completion_tokens)} вых`}>
+            <Tooltip title={`Вход: ${formatTokens(message.usage.prompt_tokens)} | Выход: ${formatTokens(message.usage.completion_tokens)}`}>
               <Chip
                 size="small"
                 variant="outlined"
@@ -80,7 +87,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             )}
 
             {message.truncated && (
-              <Tooltip title="Ответ обрезан из-за ограничения длины">
+              <Tooltip title="Ответ обрезан">
                 <Chip
                   size="small"
                   color="error"
@@ -104,9 +111,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         {/* Уточняющие вопросы */}
         {!isUser && message.hasQuestions && message.suggestions && (
           <Box className="message-suggestions">
-            <Typography variant="caption" color="text.secondary">
-              🤔 Уточняющие вопросы:
-            </Typography>
+            <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', mr: 1 }}>
+              🤔 Уточните:
+            </Box>
             {message.suggestions.map((suggestion, idx) => (
               <Chip
                 key={idx}

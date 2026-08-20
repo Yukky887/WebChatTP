@@ -53,6 +53,7 @@ export interface ChatRequest {
   message: string;
   provider?: string;
   model?: string;
+  program?: string;
 }
 
 export interface ChatResponse {
@@ -65,6 +66,8 @@ export interface ChatResponse {
   model: string;
   truncated: boolean;
   usage: UsageInfo;
+  program?: string; 
+  needs_program_selection?: boolean;
 }
 
 // ==================== ПРОВАЙДЕРЫ ====================
@@ -160,6 +163,8 @@ export interface Message {
   truncated?: boolean;
   usage?: UsageInfo;
   timestamp?: Date;
+  needsProgramSelection?: boolean;  
+  program?: string;  
 }
 
 // ==================== СОСТОЯНИЕ ====================

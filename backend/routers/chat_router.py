@@ -1,41 +1,22 @@
 from fastapi import APIRouter, HTTPException
-from config import LLM_PROVIDERS, CURRENT_PROVIDER, CURRENT_MODEL
-from services.model_service import refresh_all_models
+from models import ChatRequest, ChatResponse
+from services.chat_service import process_chat
+from config import LLM_PROVIDERS
+from services.state import state
 
-router = APIRouter(prefix="/api", tags=["providers"])
+router = APIRouter(prefix="/api", tags=["chat"])
 
-@router.get("/providers")
-async def get_providers():
-    await refresh_all_models()
-    providers = []
-    for pid, cfg in LLM_PROVIDERS.items():
-        if cfg["enabled"]:
-            providers.append({
-                "id": pid,
-                "name": cfg["name"],
-                "api_type": cfg["api_type"],
-                "models": cfg["models"],
-                "available": len(cfg["models"]) > 0,
-                "current": pid == CURRENT_PROVIDER
-            })
-    return {
-        "providers": providers,
-        "current_provider": CURRENT_PROVIDER,
-        "current_model": CURRENT_MODEL
-    }
-
-@router.post("/providers/select")
-async def select_provider(provider: str, model: str = None):
-    global CURRENT_PROVIDER, CURRENT_MODEL
+@router.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    provider = request.provider or state.current_provider
+    model_name = request.model or state.current_model
     
     if provider not in LLM_PROVIDERS:
         raise HTTPException(400, "Неизвестный провайдер")
     if not LLM_PROVIDERS[provider]["enabled"]:
         raise HTTPException(400, "Провайдер отключен")
-    if not LLM_PROVIDERS[provider]["models"]:
+    if not model_name:
         raise HTTPException(400, "Нет доступных моделей")
     
-    CURRENT_PROVIDER = provider
-    CURRENT_MODEL = model if model in LLM_PROVIDERS[provider]["models"] else LLM_PROVIDERS[provider]["models"][0]
-    
-    return {"provider": CURRENT_PROVIDER, "model": CURRENT_MODEL}
+    result = await process_chat(request.message, provider, model_name, request.session_id, request.program)
+    return ChatResponse(**result)

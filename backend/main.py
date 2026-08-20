@@ -5,7 +5,8 @@ from routers import (
     chat_router, 
     search_router, 
     health_router, 
-    admin_router, 
+    admin_router,
+    provider_router, 
 )
 from services.model_service import refresh_all_models
 from config import LLM_PROVIDERS, CURRENT_PROVIDER, CURRENT_MODEL
@@ -50,7 +51,7 @@ app.include_router(health_router.router)
 app.include_router(search_router.router)
 app.include_router(chat_router.router)
 app.include_router(admin_router.router)
-
+app.include_router(provider_router.router)
 
 if __name__ == "__main__":
     import uvicorn

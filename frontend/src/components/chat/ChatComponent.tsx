@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box, Card, CardContent, Typography, IconButton, Chip, Divider,
-  CircularProgress, Tooltip,
+  CircularProgress, Tooltip, Button,
 } from '@mui/material';
 import {
   Clear as ClearIcon,
@@ -21,6 +21,8 @@ export const ChatComponent: React.FC = () => {
     send, clear, messagesEndRef,
   } = useChat();
 
+  const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
+
   const {
     providers, currentProvider, selectedModel,
     loading: providersLoading,
@@ -36,7 +38,29 @@ export const ChatComponent: React.FC = () => {
   };
 
   const handleSuggestion = (suggestion: string) => {
-    send(suggestion, currentProvider, selectedModel);
+    send(suggestion, currentProvider, selectedModel, selectedProgram || undefined);
+  };
+
+  // Обработчик выбора программы
+  const handleProgramSelect = (program: string) => {
+    setSelectedProgram(program);
+  
+    const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
+    
+    if (lastUserMessage) {
+      send(lastUserMessage.content, currentProvider, selectedModel, program);
+    }
+  };
+
+  // Обработчик отправки сообщения
+  const handleSend = (text: string) => {
+    send(text, currentProvider, selectedModel, selectedProgram || undefined);
+  };
+
+  // Очистка программы при очистке чата
+  const handleClear = () => {
+    setSelectedProgram(null);
+    clear();
   };
 
   return (
@@ -60,7 +84,7 @@ export const ChatComponent: React.FC = () => {
             </IconButton>
           </Tooltip>
           <Tooltip title="Очистить чат">
-            <IconButton onClick={clear} size="small">
+            <IconButton onClick={handleClear} size="small">
               <ClearIcon />
             </IconButton>
           </Tooltip>
@@ -79,8 +103,24 @@ export const ChatComponent: React.FC = () => {
         />
       </Box>
 
+      {/* Выбранная программа */}
+      {selectedProgram && (
+        <Box sx={{ p: 1, bgcolor: '#f0f7ff', borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2">
+            Программа: <strong>{selectedProgram === 'intellect' ? '🧠 Parts.Intellect' : '🔧 Parts.Resource'}</strong>
+          </Typography>
+          <Chip
+            label="Сбросить"
+            size="small"
+            variant="outlined"
+            onClick={() => setSelectedProgram(null)}
+            sx={{ cursor: 'pointer', ml: 1 }}
+          />
+        </Box>
+      )}
+
       {/* Messages */}
-      <Box className="chat-messages" ref={messagesEndRef}>
+      <Box className="chat-messages">
         {messages.length === 0 ? (
           <Box className="chat-empty">
             <QuestionIcon className="chat-empty-icon" />
@@ -95,12 +135,35 @@ export const ChatComponent: React.FC = () => {
           </Box>
         ) : (
           messages.map((msg, idx) => (
-            <MessageBubble
-              key={idx}
-              message={msg}
-              onCopy={handleCopy}
-              onSuggestionClick={handleSuggestion}
-            />
+            <React.Fragment key={idx}>
+              <MessageBubble
+                message={msg}
+                onCopy={handleCopy}
+                onSuggestionClick={handleSuggestion}
+              />
+              
+              {/* Кнопки выбора программы ПОСЛЕ сообщения с needs_program_selection */}
+              {msg.needsProgramSelection && (
+                <Box sx={{ display: 'flex', gap: 1, ml: 5, mt: 1, mb: 2 }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    onClick={() => handleProgramSelect('intellect')}
+                  >
+                    🧠 Parts.Intellect
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    size="small"
+                    onClick={() => handleProgramSelect('resource')}
+                  >
+                    🔧 Parts.Resource
+                  </Button>
+                </Box>
+              )}
+            </React.Fragment>
           ))
         )}
 
@@ -118,6 +181,8 @@ export const ChatComponent: React.FC = () => {
             {error}
           </Typography>
         )}
+
+        <div ref={messagesEndRef} />
       </Box>
 
       {/* Input */}
@@ -125,7 +190,7 @@ export const ChatComponent: React.FC = () => {
         <MessageInput
           loading={loading}
           disabled={!selectedModel}
-          onSend={(text) => send(text, currentProvider, selectedModel)}
+          onSend={handleSend}
         />
       </Box>
     </Card>

@@ -18,7 +18,8 @@ export const useChat = () => {
   const send = useCallback(async (
     text: string,
     provider: string,
-    model: string
+    model: string,
+    program?: string
   ) => {
     if (!text.trim() || loading) return;
 
@@ -38,6 +39,7 @@ export const useChat = () => {
         provider,
         model,
         session_id: sessionId || undefined,
+        program,
       });
 
       setSessionId(response.session_id);
@@ -51,6 +53,8 @@ export const useChat = () => {
         truncated: response.truncated,
         usage: response.usage,
         timestamp: new Date(),
+        needsProgramSelection: response.needs_program_selection || false, 
+        program: response.program,
       };
 
       setMessages(prev => [...prev, assistantMessage]);

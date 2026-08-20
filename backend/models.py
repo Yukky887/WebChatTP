@@ -10,6 +10,7 @@ class ChatRequest(BaseModel):
     message: str
     provider: Optional[str] = None
     model: Optional[str] = None
+    program: Optional[str] = None
 
 class UsageInfo(BaseModel):
     prompt_tokens: int = 0
@@ -38,6 +39,8 @@ class ChatResponse(BaseModel):
     model: str = ""
     truncated: bool = False
     usage: UsageInfo = UsageInfo()
+    program: Optional[str] = None
+    needs_program_selection: bool = True
 
 class LLMSettings(BaseModel):
     temperature: float = 0.5
