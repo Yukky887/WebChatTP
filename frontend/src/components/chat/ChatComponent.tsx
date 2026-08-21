@@ -18,10 +18,11 @@ import { ProviderSelector } from './ProviderSelector';
 export const ChatComponent: React.FC = () => {
   const {
     messages, loading, sessionId, error,
-    send, clear, messagesEndRef,
+    send, clear, messagesEndRef, removeProgramSelection,
   } = useChat();
 
   const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
+  const [pendingProgramSelection, setPendingProgramSelection] = useState<boolean>(false);
 
   const {
     providers, currentProvider, selectedModel,
@@ -42,24 +43,29 @@ export const ChatComponent: React.FC = () => {
   };
 
   // Обработчик выбора программы
-  const handleProgramSelect = (program: string) => {
+  const handleProgramSelect = async (program: string) => {
     setSelectedProgram(program);
-  
+    setPendingProgramSelection(false); 
+    
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
     
     if (lastUserMessage) {
-      send(lastUserMessage.content, currentProvider, selectedModel, program);
+      // Удаляем сообщение с кнопками
+      removeProgramSelection();
+      
+      // Отправляем запрос
+      await send(lastUserMessage.content, currentProvider, selectedModel, program, true);
     }
   };
 
-  // Обработчик отправки сообщения
+  // Отправка из поля ввода
   const handleSend = (text: string) => {
     send(text, currentProvider, selectedModel, selectedProgram || undefined);
   };
 
-  // Очистка программы при очистке чата
   const handleClear = () => {
     setSelectedProgram(null);
+    setPendingProgramSelection(false);
     clear();
   };
 
@@ -128,23 +134,15 @@ export const ChatComponent: React.FC = () => {
               Задайте вопрос по документации
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {!selectedModel
-                ? 'Сначала выберите модель LLM'
-                : 'Ассистент найдёт ответ в заявках ТП и документации'}
+              {!selectedModel ? 'Сначала выберите модель LLM' : 'Ассистент найдёт ответ'}
             </Typography>
           </Box>
         ) : (
-          messages.map((msg, idx) => (
-            <React.Fragment key={idx}>
-              <MessageBubble
-                message={msg}
-                onCopy={handleCopy}
-                onSuggestionClick={handleSuggestion}
-              />
-              
-              {/* Кнопки выбора программы ПОСЛЕ сообщения с needs_program_selection */}
-              {msg.needsProgramSelection && (
-                <Box sx={{ display: 'flex', gap: 1, ml: 5, mt: 1, mb: 2 }}>
+          messages.map((msg, idx) => {
+            // Если это запрос выбора программы — показываем только кнопки
+            if (msg.needsProgramSelection && idx === messages.length - 1) {
+              return (
+                <Box key={idx} sx={{ display: 'flex', gap: 1, ml: 5, mt: 1, mb: 2 }}>
                   <Button
                     variant="contained"
                     color="primary"
@@ -162,17 +160,25 @@ export const ChatComponent: React.FC = () => {
                     🔧 Parts.Resource
                   </Button>
                 </Box>
-              )}
-            </React.Fragment>
-          ))
+              );
+            }
+
+            // Обычное сообщение
+            return (
+              <MessageBubble
+                key={idx}
+                message={msg}
+                onCopy={handleCopy}
+                onSuggestionClick={handleSuggestion}
+              />
+            );
+          })
         )}
 
         {loading && (
           <Box className="chat-loading">
             <CircularProgress size={20} />
-            <Typography variant="body2">
-              Ассистент думает...
-            </Typography>
+            <Typography variant="body2">Ассистент думает...</Typography>
           </Box>
         )}
 

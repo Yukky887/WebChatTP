@@ -19,17 +19,16 @@ export const useChat = () => {
     text: string,
     provider: string,
     model: string,
-    program?: string
+    program?: string,
+    skipUserMessage?: boolean,
   ) => {
     if (!text.trim() || loading) return;
 
-    const userMessage: Message = {
-      role: 'user',
-      content: text,
-      timestamp: new Date(),
-    };
+    if (!skipUserMessage) {
+      const userMessage: Message = { role: 'user', content: text };
+      setMessages(prev => [...prev, userMessage]);
+    }
 
-    setMessages(prev => [...prev, userMessage]);
     setLoading(true);
     setError(null);
 
@@ -46,33 +45,29 @@ export const useChat = () => {
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: response.answer,
-        suggestions: response.suggestions,
-        hasQuestions: response.has_questions,
+        content: response.answer || '',
         sources: response.sources,
-        truncated: response.truncated,
-        usage: response.usage,
-        timestamp: new Date(),
         needsProgramSelection: response.needs_program_selection || false, 
         program: response.program,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-      
-      // Прокручиваем вниз после добавления сообщения
       setTimeout(scrollToBottom, 100);
+
     } catch (e: any) {
-      const errorMsg = e?.response?.data?.detail || e?.message || 'Ошибка при обращении к LLM';
-      setError(errorMsg);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `${errorMsg}`,
-        timestamp: new Date(),
-      }]);
+      setError(e?.response?.data?.detail || e?.message || 'Ошибка при обращении к LLM');
     } finally {
       setLoading(false);
     }
   }, [loading, sessionId, scrollToBottom]);
+
+  const removeMessage = useCallback((index: number) => {
+    setMessages(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const removeProgramSelection = useCallback(() => {
+    setMessages(prev => prev.filter(m => !m.needsProgramSelection));
+  }, []);
 
   const clear = useCallback(async () => {
     if (sessionId) {
@@ -96,5 +91,7 @@ export const useChat = () => {
     clear,
     messagesEndRef,
     scrollToBottom,
+    removeMessage,
+    removeProgramSelection,
   };
 };

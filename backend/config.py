@@ -21,7 +21,7 @@ QDRANT_COLLECTIONS = {
 }
 
 SEARCH_LIMITS = {
-    "tickets": 1,
+    "tickets": 10,
     "parts_resource": 10,
     "parts_intellect": 10
 }

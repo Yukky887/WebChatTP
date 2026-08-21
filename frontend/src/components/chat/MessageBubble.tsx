@@ -63,29 +63,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         {/* Метрики */}
         {!isUser && message.usage && (
           <Box className="message-meta">
-            <Tooltip title={`Вход: ${formatTokens(message.usage.prompt_tokens)} | Выход: ${formatTokens(message.usage.completion_tokens)}`}>
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`∑ ${formatTokens(message.usage.total_tokens)} токенов`}
-              />
-            </Tooltip>
-            
-            {message.usage.cost > 0 ? (
-              <Chip
-                size="small"
-                color="warning"
-                label={formatCost(message.usage.cost)}
-              />
-            ) : (
-              <Chip
-                size="small"
-                color="success"
-                variant="outlined"
-                label="🆓 Бесплатно"
-              />
-            )}
-
             {message.truncated && (
               <Tooltip title="Ответ обрезан">
                 <Chip
@@ -104,26 +81,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           <Box className="message-sources">
             {message.sources.map((source) => (
               <SourceChip key={source.index} source={source} />
-            ))}
-          </Box>
-        )}
-
-        {/* Уточняющие вопросы */}
-        {!isUser && message.hasQuestions && message.suggestions && (
-          <Box className="message-suggestions">
-            <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', mr: 1 }}>
-              🤔 Уточните:
-            </Box>
-            {message.suggestions.map((suggestion, idx) => (
-              <Chip
-                key={idx}
-                label={suggestion}
-                size="small"
-                color="warning"
-                variant="outlined"
-                onClick={() => onSuggestionClick?.(suggestion)}
-                sx={{ cursor: 'pointer' }}
-              />
             ))}
           </Box>
         )}
