@@ -1,4 +1,7 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api' || 'http://192.168.128.136:8000/api';
+const API_BASE_URL = 
+  process.env.REACT_APP_API_URL || 
+  'http://localhost:8000/api' || 
+  'http://192.168.128.135:8000/api';
 
 export const config = {
   apiBaseUrl: API_BASE_URL,
@@ -27,6 +30,7 @@ export const config = {
     adminModelsBlock: '/admin/models/block',
     adminProviderToggle: '/admin/provider/toggle',
     adminProviderApiKey: '/admin/provider/apikey',
+    adminSearchSettings: '/admin/search-settings',
   },
   
   // Ключ для localStorage

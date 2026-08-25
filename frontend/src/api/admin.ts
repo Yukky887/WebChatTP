@@ -2,7 +2,8 @@ import client from './client';
 import { 
   AdminSettingsResponse, 
   LLMSettings, 
-  LoginResponse 
+  LoginResponse, 
+  SearchSettings
 } from '../types';
 import config from '../config';
 
@@ -26,6 +27,19 @@ export const adminApi = {
   async getSettings(): Promise<AdminSettingsResponse> {
     const response = await client.get<AdminSettingsResponse>(config.endpoints.adminSettings);
     return response.data;
+  },
+
+  /** Получить настройки поиска */
+  async getSearchSettings(): Promise<SearchSettings> {
+    const response = await client.get(config.endpoints.adminSearchSettings);
+    return response.data;
+  },
+
+  /** Обновить настройки поиска */
+  async updateSearchSettings(useTickets: boolean, useDocumentation: boolean): Promise<void> {
+    await client.post(config.endpoints.adminSearchSettings, null, {
+      params: { use_tickets: useTickets, use_documentation: useDocumentation },
+    });
   },
 
   /** Обновить настройки LLM */

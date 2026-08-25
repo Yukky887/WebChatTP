@@ -11,6 +11,11 @@ interface SourceChipProps {
 export const SourceChip: React.FC<SourceChipProps> = ({ source }) => {
   const isTicket = source.type === 'ticket';
   
+  const ticketUrl = isTicket && source.url ? source.url : undefined;
+
+  const docUrl = !isTicket && source.url ? source.url : undefined;
+
+
   const tooltipText = isTicket
     ? [
         'Заявка ТП',
@@ -28,18 +33,14 @@ export const SourceChip: React.FC<SourceChipProps> = ({ source }) => {
         label={`[${source.index}] ${truncateText(source.title, 40)}`}
         variant="outlined"
         color={isTicket ? 'warning' : 'primary'}
-        component={isTicket ? 'div' : 'a'}
-        href={isTicket ? undefined : source.url}
-        target={isTicket ? undefined : '_blank'}
-        clickable={!isTicket}
+        component={ticketUrl || docUrl ? 'a' : 'div'}
+        href={ticketUrl || docUrl}
+        target={ticketUrl || docUrl ? '_blank' : undefined}
+        clickable={!!(ticketUrl || docUrl)}
         className="source-chip"
         sx={{ 
           maxWidth: 300,
-          '& .MuiChip-label': {
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }
+          cursor: ticketUrl || docUrl ? 'pointer' : 'default',
         }}
       />
     </Tooltip>

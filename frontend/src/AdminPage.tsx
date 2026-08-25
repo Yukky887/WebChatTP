@@ -13,6 +13,8 @@ import { useAdmin } from './hooks/useAdmin';
 import { LLMSettingsPanel } from './components/admin/LLMSettingsPanel';
 import { ProvidersPanel } from './components/admin/ProvidersPanel';
 import { ModelsPanel } from './components/admin/ModelsPanel';
+import { SearchSettingsPanel } from './components/admin/SearchSettingsPanel';
+import { adminApi } from './api/admin';
 
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
@@ -24,6 +26,10 @@ const AdminPage: React.FC = () => {
 
   const [password, setPassword] = useState('');
   const [saved, setSaved] = useState(false);
+  const [searchSettings, setSearchSettings] = useState({
+    use_tickets: true,
+    use_documentation: true,
+  });
 
   // Загружаем настройки при авторизации
   React.useEffect(() => {
@@ -31,6 +37,15 @@ const AdminPage: React.FC = () => {
       loadSettings();
     }
   }, [authenticated, settings, loadSettings]);
+
+  React.useEffect(() => {
+    if (settings) {
+      setSearchSettings({
+        use_tickets: settings.search_settings?.use_tickets ?? true,
+        use_documentation: settings.search_settings?.use_documentation ?? true,
+      });
+    }
+  }, [settings]);
 
   const handleLogin = async () => {
     const success = await login(password);
@@ -44,6 +59,24 @@ const AdminPage: React.FC = () => {
     if (success) {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+    }
+  };
+
+  const handleToggleTickets = async (enabled: boolean) => {
+    setSearchSettings(prev => ({ ...prev, use_tickets: enabled }));
+    try {
+      await adminApi.updateSearchSettings(enabled, searchSettings.use_documentation);
+    } catch (e) {
+      console.error('Toggle tickets error:', e);
+    }
+  };
+
+  const handleToggleDocumentation = async (enabled: boolean) => {
+    setSearchSettings(prev => ({ ...prev, use_documentation: enabled }));
+    try {
+      await adminApi.updateSearchSettings(searchSettings.use_tickets, enabled);
+    } catch (e) {
+      console.error('Toggle documentation error:', e);
     }
   };
 
@@ -132,6 +165,14 @@ const AdminPage: React.FC = () => {
               saved={saved}
               onSave={handleSaveSettings}
               onReset={resetSettings}
+            />
+
+            <SearchSettingsPanel
+              useTickets={searchSettings.use_tickets}
+              useDocumentation={searchSettings.use_documentation}
+              loading={loading}
+              onToggleTickets={handleToggleTickets}
+              onToggleDocumentation={handleToggleDocumentation}
             />
 
             <ProvidersPanel

@@ -102,3 +102,7 @@ FAVORITE_MODELS: List[str] = []
 
 # Текущие настройки LLM
 llm_settings = DEFAULT_LLM_SETTINGS.copy()
+
+# ==================== НАСТРОЙКИ ПОИСКА ====================
+USE_TICKETS = True  # Использовать заявки ТП в контексте
+USE_DOCUMENTATION = True  # Использовать документацию в контексте

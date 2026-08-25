@@ -34,7 +34,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         {/* ПУЗЫРЬ */}
         <Box sx={{
           display: 'flex',
-          flexDirection: 'column',  // ← Колонка: текст сверху, кнопки + send снизу
+          flexDirection: 'column', 
           bgcolor: 'white',
           borderRadius: 3,
           p: 1.5,

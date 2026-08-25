@@ -133,6 +133,11 @@ export interface ProviderModels {
   grouped: Record<string, string[]>;
 }
 
+export interface SearchSettings {
+  use_tickets: boolean;
+  use_documentation: boolean;
+}
+
 export interface AdminSettingsResponse {
   settings: LLMSettings;
   allowed_models: string[];
@@ -141,6 +146,7 @@ export interface AdminSettingsResponse {
   providers: Record<string, ProviderConfig>;
   current_provider: string;
   current_model: string;
+  search_settings?: SearchSettings;
 }
 
 export interface LoginRequest {

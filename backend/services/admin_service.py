@@ -3,7 +3,7 @@ import uuid
 from config import (
     LLM_PROVIDERS, llm_settings, DEFAULT_LLM_SETTINGS,
     ADMIN_PASSWORD, ALLOWED_MODELS, FAVORITE_MODELS,
-    CURRENT_PROVIDER, CURRENT_MODEL
+    CURRENT_PROVIDER, CURRENT_MODEL, USE_TICKETS, USE_DOCUMENTATION,
 )
 
 # Сессии админов
@@ -43,6 +43,25 @@ def update_llm_settings(settings: Dict) -> Dict:
         llm_settings["system_prompt_template"] = settings["system_prompt_template"]
     
     return llm_settings.copy()
+
+def get_search_settings() -> Dict:
+    """Получает текущие настройки поиска"""
+    return {
+        "use_tickets": USE_TICKETS,
+        "use_documentation": USE_DOCUMENTATION
+    }
+
+def update_search_settings(use_tickets: bool, use_documentation: bool) -> Dict:
+    """Обновляет настройки поиска"""
+    global USE_TICKETS, USE_DOCUMENTATION
+
+    USE_TICKETS = use_tickets
+    USE_DOCUMENTATION = use_documentation
+
+    return {
+        "use_tickets": USE_TICKETS,
+        "use_documentation": USE_DOCUMENTATION
+    }
 
 def reset_settings() -> Dict:
     """Сбрасывает настройки на значения по умолчанию"""

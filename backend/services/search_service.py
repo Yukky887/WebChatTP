@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional
 from database import collection_exists, search_in_collection
 from embeddings import get_docs_embedding, get_ticket_embedding
-from config import QDRANT_COLLECTIONS, SEARCH_LIMITS
+from config import QDRANT_COLLECTIONS, SEARCH_LIMITS, USE_TICKETS, USE_DOCUMENTATION
 
 async def search_all(query: str, program: Optional[str] = None) -> List[Dict]:
     """
@@ -15,21 +15,21 @@ async def search_all(query: str, program: Optional[str] = None) -> List[Dict]:
     # Определяем какие коллекции использовать
     collections_to_search = {}
     
-    # Заявки ВСЕГДА ищем (общие для обеих программ)
-    collections_to_search["tickets"] = QDRANT_COLLECTIONS.get("tickets")
+    if USE_TICKETS:
+        collections_to_search["tickets"] = QDRANT_COLLECTIONS.get("tickets")
     
-    # Документация — только нужной программы
-    if program == "intellect":
-        collections_to_search["parts_intellect"] = QDRANT_COLLECTIONS.get("parts_intellect")
-        print(f"🔍 [Intellect] TsSpKb + PartsIntellect")
-    elif program == "resource":
-        collections_to_search["parts_resource"] = QDRANT_COLLECTIONS.get("parts_resource")
-        print(f"🔍 [Resource] TsSpKb + PartsResource")
-    else:
-        # Если программа не указана — ищем во всех
-        collections_to_search["parts_intellect"] = QDRANT_COLLECTIONS.get("parts_intellect")
-        collections_to_search["parts_resource"] = QDRANT_COLLECTIONS.get("parts_resource")
-        print(f"🔍 [All] TsSpKb + PartsIntellect + PartsResource")
+    if USE_DOCUMENTATION:
+        if program == "intellect":
+            collections_to_search["parts_intellect"] = QDRANT_COLLECTIONS.get("parts_intellect")
+            print(f"🔍 [Intellect] TsSpKb + PartsIntellect")
+        elif program == "resource":
+            collections_to_search["parts_resource"] = QDRANT_COLLECTIONS.get("parts_resource")
+            print(f"🔍 [Resource] TsSpKb + PartsResource")
+        else:
+            # Если программа не указана — ищем во всех
+            collections_to_search["parts_intellect"] = QDRANT_COLLECTIONS.get("parts_intellect")
+            collections_to_search["parts_resource"] = QDRANT_COLLECTIONS.get("parts_resource")
+            print(f"🔍 [All] TsSpKb + PartsIntellect + PartsResource")
     
     # Векторизуем запрос
     docs_vector = get_docs_embedding(query)
@@ -72,6 +72,7 @@ def _process_point(collection_type: str, point) -> Dict:
     score = point.score if hasattr(point, 'score') else 0
     
     if collection_type == "tickets":
+        filename = payload.get("filename", "")
         return {
             "type": "ticket",
             "collection": "tickets",
@@ -81,6 +82,9 @@ def _process_point(collection_type: str, point) -> Dict:
             "author": payload.get("author", ""),
             "source_date": payload.get("source_date", ""),
             "keywords": payload.get("keywords", []),
+            "filename": filename,
+            "url": f"https://dokuwiki.tradesoft.ru/tickets:{filename.replace('.txt', '')}"
+            if filename else "",
             "score": score
         }
     else:

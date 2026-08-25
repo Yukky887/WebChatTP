@@ -123,6 +123,7 @@ async def process_chat(
                 "index": i + 1,
                 "type": "ticket",
                 "title": t.get("header", ""),
+                "url": t.get("url", ""),
                 "score": t.get("score", 0),
                 "content_length": len(t.get("answer", ""))
             })

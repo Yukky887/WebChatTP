@@ -3,7 +3,7 @@ from models import LLMSettings, BlockedModelsUpdate, LoginRequest
 from services.admin_service import (
     check_admin, login, logout, get_llm_settings,
     update_llm_settings, reset_settings, update_allowed_models,
-    toggle_provider, set_api_key
+    toggle_provider, set_api_key, get_search_settings, update_search_settings
 )
 from services.model_service import (
     refresh_all_models, get_providers_models,
@@ -11,7 +11,7 @@ from services.model_service import (
 )
 from config import (
     LLM_PROVIDERS, ALLOWED_MODELS, FAVORITE_MODELS,
-    CURRENT_PROVIDER, CURRENT_MODEL
+    CURRENT_PROVIDER, CURRENT_MODEL, USE_TICKETS, USE_DOCUMENTATION
 )
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -57,8 +57,25 @@ async def get_settings(token: str):
             for pid, c in LLM_PROVIDERS.items()
         },
         "current_provider": CURRENT_PROVIDER,
-        "current_model": CURRENT_MODEL
+        "current_model": CURRENT_MODEL,
+        "search_settings": get_search_settings(),
     }
+
+@router.get("/search/settings")
+async def get_search_settings_endpoint(token: str):
+    """Получить настройки поиска"""
+    if not check_admin(token):
+        raise HTTPException(401, "Требуется авторизация")
+    
+    return get_search_settings()
+
+@router.post("/search/settings")
+async def update_search_settings_endpoint(use_tickets: bool, use_documentation: bool, token: str):
+    """Обновить настройки поиска"""
+    if not check_admin(token):
+        raise HTTPException(401, "Требуется авторизация")
+
+    return update_search_settings(use_tickets, use_documentation)
 
 @router.post("/settings")
 async def update_settings(settings: LLMSettings, token: str):
