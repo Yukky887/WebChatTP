@@ -25,3 +25,7 @@ yarn-error.log*
 venv/
 frontend/venv/
 *.venv/
+
+# Docker
+.docker/
+docker-compose.override.yml

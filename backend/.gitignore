@@ -84,3 +84,7 @@ temp/
 *.tmp
 *.bak
 *.swp
+
+# Docker
+.docker/
+docker-compose.override.yml

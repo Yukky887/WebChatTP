@@ -1,7 +1,5 @@
 const API_BASE_URL = 
-  process.env.REACT_APP_API_URL || 
-  'http://localhost:8000/api' || 
-  'http://192.168.128.135:8000/api';
+  process.env.REACT_APP_API_URL || '/api';
 
 export const config = {
   apiBaseUrl: API_BASE_URL,
