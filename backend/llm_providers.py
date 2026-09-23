@@ -1,44 +1,66 @@
+# backend/llm_providers.py
+"""Провайдеры LLM — работа с API"""
 import httpx
 from typing import Dict, List
-from config import LLM_PROVIDERS, llm_settings
+from sqlalchemy.ext.asyncio import AsyncSession
 
-clients: Dict[str, httpx.AsyncClient] = {}
+from db.repositories import SettingsRepository
 
-def get_client(provider: str) -> httpx.AsyncClient:
-    if provider not in clients:
-        config = LLM_PROVIDERS[provider]
+
+_clients: Dict[str, httpx.AsyncClient] = {}
+
+
+def _get_client(base_url: str, api_key: str = "") -> httpx.AsyncClient:
+    """Получает или создаёт HTTP клиент"""
+    key = f"{base_url}|{api_key}"
+    if key not in _clients:
         headers = {}
-        if config.get("api_key"):
-            headers["Authorization"] = f"Bearer {config['api_key']}"
-        clients[provider] = httpx.AsyncClient(
-            base_url=config["base_url"],
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        _clients[key] = httpx.AsyncClient(
+            base_url=base_url,
             timeout=180.0,
-            headers=headers if headers else None
+            headers=headers if headers else None,
         )
-    return clients[provider]
+    return _clients[key]
 
-async def chat_completion(provider: str, model: str, messages: List[Dict]) -> Dict:
-    """Универсальный запрос к LLM"""
-    client = get_client(provider)
+
+async def chat_completion(
+    provider_id: str,
+    base_url: str,
+    api_type: str,
+    api_key: str,
+    model: str,
+    messages: List[Dict],
+    db: AsyncSession,
+) -> Dict:
+    """
+    Универсальный запрос к LLM.
+    Настройки (temperature, max_tokens) читаются из БД.
+    """
+    client = _get_client(base_url, api_key)
     
-    if provider == "ollama":
-        return await _ollama_chat(client, model, messages)
-    elif provider in ["llamacpp", "routerai"]:
-        return await _openai_chat(client, model, messages, provider)
+    # Получаем настройки из БД
+    settings_repo = SettingsRepository(db)
+    llm_settings = await settings_repo.get_llm_settings()
+    
+    if api_type == "ollama":
+        return await _ollama_chat(client, model, messages, llm_settings)
     else:
-        raise Exception(f"Неизвестный провайдер: {provider}")
+        return await _openai_chat(client, model, messages, llm_settings, provider_id)
 
-async def _ollama_chat(client, model, messages):
+
+async def _ollama_chat(client, model, messages, settings) -> Dict:
     resp = await client.post("/api/chat", json={
         "model": model,
         "messages": messages,
         "stream": False,
         "options": {
-            "temperature": llm_settings["temperature"],
-            "num_predict": llm_settings["max_tokens"],
-            "top_p": llm_settings["top_p"],
-            "repeat_penalty": llm_settings["repeat_penalty"],
-            "num_ctx": llm_settings["num_ctx"]
+            "temperature": float(settings.temperature),
+            "num_predict": settings.max_tokens,
+            "top_p": float(settings.top_p),
+            "repeat_penalty": float(settings.repeat_penalty),
+            "num_ctx": settings.num_ctx,
         }
     })
     
@@ -49,21 +71,27 @@ async def _ollama_chat(client, model, messages):
         ct = len(content) // 4
         return {
             "content": content,
-            "usage": {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt+ct, "cost": 0},
-            "finish_reason": "stop"
+            "usage": {
+                "prompt_tokens": pt,
+                "completion_tokens": ct,
+                "total_tokens": pt + ct,
+                "cost": 0,
+            },
+            "finish_reason": "stop",
         }
-    raise Exception(f"Ollama error: {resp.status_code}")
+    raise Exception(f"Ollama error: {resp.status_code} - {resp.text[:200]}")
 
-async def _openai_chat(client, model, messages, provider):
+
+async def _openai_chat(client, model, messages, settings, provider_id: str) -> Dict:
     payload = {
         "model": model,
         "messages": messages,
-        "temperature": llm_settings["temperature"],
-        "max_tokens": llm_settings["max_tokens"],
-        "top_p": llm_settings["top_p"],
+        "temperature": float(settings.temperature),
+        "max_tokens": settings.max_tokens,
+        "top_p": float(settings.top_p),
     }
     
-    if provider == "llamacpp":
+    if provider_id == "llamacpp":
         payload["stop"] = ["<end_of_turn>", "<eos>"]
     
     resp = await client.post("/chat/completions", json=payload)
@@ -83,8 +111,8 @@ async def _openai_chat(client, model, messages, provider):
                 "prompt_tokens": usage.get("prompt_tokens", 0),
                 "completion_tokens": usage.get("completion_tokens", 0),
                 "total_tokens": usage.get("total_tokens", 0),
-                "cost": usage.get("cost", 0)
+                "cost": usage.get("cost", 0),
             },
-            "finish_reason": fr
+            "finish_reason": fr,
         }
-    raise Exception(f"{provider} error: {resp.status_code}")
+    raise Exception(f"{provider_id} error: {resp.status_code} - {resp.text[:200]}")

@@ -1,109 +1,116 @@
+# backend/services/model_service.py
+"""Управление моделями (через БД)"""
 from typing import List, Dict
-import httpx
-from config import LLM_PROVIDERS, ALLOWED_MODELS, FAVORITE_MODELS, CURRENT_PROVIDER, CURRENT_MODEL
-from services.admin_service import group_models_by_family
+from sqlalchemy.ext.asyncio import AsyncSession
 
-def filter_models(models: List[str]) -> List[str]:
-    """Оставляет только разрешенные модели"""
-    if not models or not ALLOWED_MODELS:
-        return []
+from db.session import AsyncSessionLocal
+from db.repositories import ProviderRepository
+from db.models import LLMProvider
+from services.state import state
+
+
+# Кэш моделей в памяти (обновляется через refresh)
+_models_cache: Dict[str, List[str]] = {}
+
+
+async def fetch_provider_models(provider: LLMProvider) -> List[str]:
+    """Получает модели от провайдера по API"""
+    import httpx
     
-    allowed = [m for m in models if m in ALLOWED_MODELS]
-    favs = [m for m in allowed if m in FAVORITE_MODELS]
-    others = sorted([m for m in allowed if m not in FAVORITE_MODELS])
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {}
+            if provider.api_key_encrypted:
+                headers["Authorization"] = f"Bearer {provider.api_key_encrypted}"
+            
+            if provider.api_type == "ollama":
+                # Ollama
+                url = f"{provider.base_url}/api/tags"
+                r = await client.get(url, headers=headers)
+                if r.status_code == 200:
+                    return sorted([m.get("name", "") for m in r.json().get("models", [])])
+            else:
+                # OpenAI-совместимый (llama.cpp, RouterAI)
+                url = f"{provider.base_url}/models"
+                r = await client.get(url, headers=headers)
+                if r.status_code == 200:
+                    data = r.json()
+                    models = [m.get("id", "") for m in data.get("data", [])]
+                    if models:
+                        return sorted(models)
+    except Exception as e:
+        print(f"⚠️ {provider.id} fetch error: {e}")
     
-    return favs + others
-
-async def fetch_ollama_models_raw() -> List[str]:
-    """Все модели Ollama без фильтрации"""
-    try:
-        from llm_providers import get_client
-        client = get_client("ollama")
-        r = await client.get("/api/tags", timeout=5)
-        if r.status_code == 200:
-            return sorted([m.get("name", "") for m in r.json().get("models", [])])
-    except:
-        pass
     return []
 
-async def fetch_llamacpp_models_raw() -> List[str]:
-    """Все модели llama.cpp без фильтрации"""
-    try:
-        from llm_providers import get_client
-        client = get_client("llamacpp")
-        r = await client.get("/models", timeout=5)
-        if r.status_code == 200:
-            return sorted([m.get("id", "") for m in r.json().get("data", [])])
-    except:
-        pass
-    return []
 
-async def fetch_routerai_models_raw() -> List[str]:
-    """Все модели RouterAI без фильтрации"""
-    try:
-        from llm_providers import get_client
-        client = get_client("routerai")
-        r = await client.get("/models", timeout=5)
-        if r.status_code == 200:
-            return sorted([m.get("id", "") for m in r.json().get("data", [])])
-    except:
-        pass
-    return []
-
-async def refresh_all_models():
-    """Обновляет модели всех провайдеров"""
-    global CURRENT_PROVIDER, CURRENT_MODEL
+async def refresh_all_models() -> None:
+    """Обновляет модели всех провайдеров из БД"""
+    global _models_cache
     
     print("🔄 Обновление моделей...")
     
-    LLM_PROVIDERS["ollama"]["models"] = filter_models(await fetch_ollama_models_raw())
-    LLM_PROVIDERS["llamacpp"]["models"] = filter_models(await fetch_llamacpp_models_raw())
-    LLM_PROVIDERS["routerai"]["models"] = filter_models(await fetch_routerai_models_raw())
-    
-    for pid in ["ollama", "llamacpp", "routerai"]:
-        cfg = LLM_PROVIDERS[pid]
-        print(f"   {cfg['name']}: {len(cfg['models'])} моделей (включен: {cfg['enabled']})")
-    
-    # Автовыбор
-    if not CURRENT_MODEL:
-        for pid in ["ollama", "llamacpp", "routerai"]:
-            cfg = LLM_PROVIDERS[pid]
-            if cfg["enabled"] and cfg["models"]:
-                CURRENT_PROVIDER = pid
-                CURRENT_MODEL = cfg["models"][0]
-                break
-    
-    # Переключение
-    cur = LLM_PROVIDERS.get(CURRENT_PROVIDER, {})
-    if not cur.get("enabled") or not cur.get("models"):
-        for pid in ["ollama", "llamacpp", "routerai"]:
-            cfg = LLM_PROVIDERS[pid]
-            if cfg["enabled"] and cfg["models"]:
-                CURRENT_PROVIDER = pid
-                CURRENT_MODEL = cfg["models"][0]
-                print(f"⚠️ Переключились на {cfg['name']}")
-                break
-        else:
-            CURRENT_MODEL = ""
-            print("⚠️ Нет доступных провайдеров!")
-
-async def get_providers_models() -> Dict:
-    """Получает все модели по провайдерам с группировкой"""
-    providers_models = {}
-    
-    for pid in ["ollama", "llamacpp", "routerai"]:
-        raw = []
-        if pid == "ollama":
-            raw = await fetch_ollama_models_raw()
-        elif pid == "llamacpp":
-            raw = await fetch_llamacpp_models_raw()
-        elif pid == "routerai":
-            raw = await fetch_routerai_models_raw()
+    async with AsyncSessionLocal() as db:
+        repo = ProviderRepository(db)
+        providers = await repo.get_enabled_providers()
         
-        providers_models[pid] = {
-            "name": LLM_PROVIDERS[pid]["name"],
-            "all_models": raw,
-            "grouped": group_models_by_family(raw)
-        }
+        if not providers:
+            print("   ⚠️ Нет включённых провайдеров")
+            state.current_provider = ""
+            state.current_model = ""
+            return
+        
+        enabled_providers_info = []
+        
+        for provider in providers:
+            models = await fetch_provider_models(provider)
+            
+            # Сохраняем модели в БД
+            if models:
+                await repo.ensure_models_exist(provider.id, models)
+            
+            # Фильтруем по разрешённым
+            allowed_models_db = await repo.get_allowed_models()
+            allowed_names = [m.name for m in allowed_models_db if m.provider_id == provider.id]
+            
+            # Пока разрешённых нет — показываем все (для удобства)
+            if not allowed_names:
+                filtered = models
+            else:
+                filtered = [m for m in models if m in allowed_names]
+            
+            _models_cache[provider.id] = filtered
+            
+            print(f"   {provider.name}: {len(filtered)} моделей (включен: {provider.is_enabled})")
+            enabled_providers_info.append((provider, filtered))
+        
+        # Выбираем текущего провайдера
+        if not state.current_model or state.current_provider not in [p.id for p, _ in enabled_providers_info]:
+            for provider, models in enabled_providers_info:
+                if models:
+                    state.current_provider = provider.id
+                    state.current_model = models[0]
+                    break
+            else:
+                state.current_provider = ""
+                state.current_model = ""
+
+
+async def get_providers_with_models(db: AsyncSession) -> List[Dict]:
+    """Возвращает провайдеров с моделями (для API)"""
+    repo = ProviderRepository(db)
+    providers = await repo.get_enabled_providers()
     
-    return providers_models
+    result = []
+    for p in providers:
+        models = _models_cache.get(p.id, [])
+        result.append({
+            "id": p.id,
+            "name": p.name,
+            "api_type": p.api_type,
+            "models": models,
+            "available": len(models) > 0,
+            "current": p.id == state.current_provider,
+        })
+    
+    return result

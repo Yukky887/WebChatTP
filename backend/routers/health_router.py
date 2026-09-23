@@ -1,26 +1,29 @@
-from fastapi import APIRouter
+# backend/routers/health_router.py
+from fastapi import APIRouter, Depends
 import requests
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from database import get_existing_collections
-from config import WEAVIATE_URL, LLM_PROVIDERS, CURRENT_PROVIDER, CURRENT_MODEL
-from services.model_service import refresh_all_models
+from config import WEAVIATE_URL
+from db.session import get_db
+from db.repositories import ProviderRepository
+from services.model_service import refresh_all_models, _models_cache
+from services.state import state
 
 router = APIRouter(prefix="/api", tags=["health"])
 
+
 @router.get("/health")
-async def health():
+async def health(db: AsyncSession = Depends(get_db)):
     await refresh_all_models()
-    
-    any_enabled = any(c["enabled"] for c in LLM_PROVIDERS.values())
     
     status = {
         "weaviate": False,
         "qdrant": False,
         "model": True,
         "providers": {},
-        "current_provider": CURRENT_PROVIDER,
-        "current_model": CURRENT_MODEL,
-        "any_provider_enabled": any_enabled,
-        "warning": None if any_enabled else "Все провайдеры отключены."
+        "current_provider": state.current_provider,
+        "current_model": state.current_model,
     }
     
     try:
@@ -36,13 +39,18 @@ async def health():
     except:
         pass
     
-    for pid, cfg in LLM_PROVIDERS.items():
-        status["providers"][pid] = {
-            "name": cfg["name"],
-            "available": len(cfg["models"]) > 0 and cfg["enabled"],
-            "models_count": len(cfg["models"]),
-            "models": cfg["models"],
-            "enabled": cfg["enabled"]
+    # Провайдеры из БД
+    repo = ProviderRepository(db)
+    providers = await repo.get_all_providers()
+    
+    for p in providers:
+        models = _models_cache.get(p.id, [])
+        status["providers"][p.id] = {
+            "name": p.name,
+            "available": len(models) > 0 and p.is_enabled,
+            "models_count": len(models),
+            "models": models,
+            "enabled": p.is_enabled,
         }
     
     return status

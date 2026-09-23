@@ -1,53 +1,48 @@
 from typing import Dict, List, Optional
-import uuid
+from uuid import UUID, uuid4
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from services.search_service import search_all
 from llm_providers import chat_completion
+from db.repositories import ChatRepository
+from db.repositories import ProviderRepository
 
-# Сессии чата
-chat_sessions: Dict[str, Dict] = {}
-
-# Ключевые слова для определения программы
-PROGRAM_KEYWORDS = {
-    "intellect": [
-        "parts.intellect"
-    ],
-    "resource": [
-        "parts.resource"
-    ]
-}
 
 class QuestionClassifier:
     """Классификатор вопросов"""
     
+    PROGRAM_KEYWORDS = {
+        "intellect": ["parts.intellect", "интеллект"],
+        "resource": ["parts.resource", "ресурс"],
+    }
+    
     def classify(self, question: str) -> Optional[str]:
-        """Определяет программу по ключевым словам"""
         q = question.lower()
-        
-        intellect_score = sum(1 for kw in PROGRAM_KEYWORDS["intellect"] if kw in q)
-        resource_score = sum(1 for kw in PROGRAM_KEYWORDS["resource"] if kw in q)
+        intellect_score = sum(1 for kw in self.PROGRAM_KEYWORDS["intellect"] if kw in q)
+        resource_score = sum(1 for kw in self.PROGRAM_KEYWORDS["resource"] if kw in q)
         
         if intellect_score > resource_score and intellect_score > 0:
             return "intellect"
         if resource_score > intellect_score and resource_score > 0:
             return "resource"
-        
         return None
+
 
 classifier = QuestionClassifier()
 
-def truncate_content(content: str, max_length: int = 4000) -> str:
-    """Умная обрезка — сохраняет начало и конец"""
+
+def truncate_content(content: str, max_length: int = 15000) -> str:
+    """Умная обрезка"""
     if len(content) <= max_length:
         return content
-    
-    first_part = int(max_length * 0.7)  # 70% начала
-    last_part = max_length - first_part  # 30% конца
-    
+    first_part = int(max_length * 0.7)
+    last_part = max_length - first_part
     return (
         content[:first_part]
         + f"\n\n... [обрезано {len(content) - max_length} симв.] ...\n\n"
         + content[-last_part:]
     )
+
 
 async def process_chat(
     message: str,
@@ -55,36 +50,57 @@ async def process_chat(
     model: str,
     session_id: str = None,
     program: Optional[str] = None,
+    user_id: Optional[int] = None,
+    db: Optional[AsyncSession] = None,
 ) -> Dict:
     """
-    Вся логика здесь:
-    1. Определяет программу
-    2. Если не определена — запрашивает выбор
-    3. Ищет в нужной коллекции
-    4. Формирует контекст
-    5. Запрашивает LLM
+    Обрабатывает сообщение чата с сохранением в БД
     """
+    # Работаем с БД если передана сессия
+    chat_repo = ChatRepository(db) if db else None
+    
+    # Парсим UUID сессии
+    parsed_session_id = None
+    if session_id:
+        try:
+            parsed_session_id = UUID(session_id)
+        except (ValueError, TypeError):
+            parsed_session_id = None
+    
+    # Создаём или получаем сессию в БД
+    db_session = None
+    if chat_repo:
+        db_session = await chat_repo.get_or_create_session(
+            session_id=parsed_session_id,
+            user_id=user_id,
+            provider_id=provider,
+        )
+        session_id = str(db_session.id)
     
     if not session_id:
-        session_id = str(uuid.uuid4())
+        session_id = str(uuid4())
     
-    if session_id not in chat_sessions:
-        chat_sessions[session_id] = {
-            "messages": [],
-            "last_program": None,
-        }
+    # Загружаем историю из БД
+    history = []
+    if chat_repo and db_session:
+        messages = await chat_repo.get_session_messages(db_session.id, limit=10)
+        history = [{"role": m.role, "content": m.content} for m in messages]
     
-    session = chat_sessions[session_id]
-    
-    # ========== ШАГ 1: ОПРЕДЕЛЯЕМ ПРОГРАММУ ==========
+    # ========== ОПРЕДЕЛЯЕМ ПРОГРАММУ ==========
     if program:
-        # Пользователь явно выбрал (кнопка)
         detected_program = program
     else:
-        # Классифицируем по словам
         detected_program = classifier.classify(message)
     
-    # ========== ШАГ 2: ЕСЛИ НЕ ОПРЕДЕЛИЛИ — СПРАШИВАЕМ ==========
+    # Сохраняем вопрос в БД
+    if chat_repo and db_session:
+        await chat_repo.add_message(
+            session_id=db_session.id,
+            role="user",
+            content=message,
+        )
+    
+    # ========== НЕТ ПРОГРАММЫ ==========
     if not detected_program:
         return {
             "session_id": session_id,
@@ -100,14 +116,18 @@ async def process_chat(
             "needs_program_selection": True
         }
     
-    # ========== ШАГ 3: ПОИСК В НУЖНОЙ КОЛЛЕКЦИИ ==========
+    # Обновляем программу в сессии
+    if chat_repo and db_session:
+        await chat_repo.update_session_program(db_session.id, detected_program)
+    
+    # ========== ПОИСК ==========
     print(f"🔍 [{detected_program}] Поиск: {message[:50]}...")
-    search_results = await search_all(message, program=detected_program)
+    search_results = await search_all(message, program=detected_program, db=db)
     
     tickets = [r for r in search_results if r.get("type") == "ticket"][:10]
     docs = [r for r in search_results if r.get("type") == "documentation"][:10]
     
-    # ========== ШАГ 4: ФОРМИРУЕМ КОНТЕКСТ ==========
+    # ========== КОНТЕКСТ ==========
     context_parts = []
     sources = []
     
@@ -131,10 +151,9 @@ async def process_chat(
     if docs:
         context_parts.append("\n### 📚 Документация:\n")
         for i, d in enumerate(docs):
-            content = d.get("content", "")
             context_parts.append(
                 f"[Док {i+1}] {d.get('title', '')}\n"
-                f"{truncate_content(content, 15000)}"  # ← Увеличено
+                f"{truncate_content(d.get('content', ''))}"
             )
             sources.append({
                 "index": len(tickets) + i + 1,
@@ -146,12 +165,9 @@ async def process_chat(
             })
     
     context_text = "\n\n".join(context_parts) if context_parts else "Контекст не найден."
-    print(f"📊 Контекст: {len(context_text)} символов")
-    print(f"   Заявки: {sum(len(t.get('answer', '')) for t in tickets)} симв.")
-    print(f"   Документация: {sum(len(d.get('content', '')) for d in docs)} симв.")
     program_name = "Parts.Intellect" if detected_program == "intellect" else "Parts.Resource"
     
-    # ========== ШАГ 5: СИСТЕМНЫЙ ПРОМПТ ==========
+    # ========== ПРОМПТ ==========
     system_prompt = f"""Ты - ассистент по {program_name}.
 
 КОНТЕКСТ (только {program_name}):
@@ -162,22 +178,45 @@ async def process_chat(
 2. Используй заявки ТП как приоритет
 3. Документация дополняет
 4. Если информации недостаточно — скажи об этом
-
-История:
-{format_history(session["messages"][-6:])}
 """
     
-    # ========== ШАГ 6: ЗАПРОС К LLM ==========
+    # ========== ЗАПРОС К LLM ==========
     messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(session["messages"][-10:])
+    messages.extend(history[-10:])
     messages.append({"role": "user", "content": message})
     
-    session["messages"].append({"role": "user", "content": message})
-    
-    result = await chat_completion(provider, model, messages)
+    provider_repo = ProviderRepository(db)
+    provider_db = None
+    for p in await provider_repo.get_all_providers():
+        if p.id == provider:
+            provider_db = p
+            break
+
+    if not provider_db:
+        raise Exception(f"Провайдер {provider} не найден")
+
+    result = await chat_completion(
+        provider_id=provider_db.id,
+        base_url=provider_db.base_url,
+        api_type=provider_db.api_type,
+        api_key=provider_db.api_key_encrypted or "",
+        model=model,
+        messages=messages,
+        db=db,
+    )
     answer = result["content"]
+    usage = result.get("usage", {})
     
-    session["messages"].append({"role": "assistant", "content": answer})
+    # Сохраняем ответ в БД
+    if chat_repo and db_session:
+        await chat_repo.add_message(
+            session_id=db_session.id,
+            role="assistant",
+            content=answer,
+            program_id=detected_program,
+            sources=sources,
+            usage=usage,
+        )
     
     print(f"✅ [{detected_program}] {len(tickets)} заявок + {len(docs)} доков → {len(answer)} символов")
     
@@ -190,16 +229,7 @@ async def process_chat(
         "provider": provider,
         "model": model,
         "truncated": "⚠️" in answer,
-        "usage": result.get("usage", {}),
+        "usage": usage,
         "program": detected_program,
         "needs_program_selection": False
     }
-
-def format_history(messages: List[Dict]) -> str:
-    if not messages:
-        return "Нет"
-    parts = []
-    for msg in messages:
-        role = "👤" if msg["role"] == "user" else "🤖"
-        parts.append(f"{role}: {msg['content'][:200]}")
-    return "\n".join(parts)

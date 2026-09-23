@@ -1,42 +1,36 @@
+# backend/main.py
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
+
 from routers import (
-    chat_router, 
-    search_router, 
-    health_router, 
-    admin_router,
-    provider_router, 
+    chat_router, search_router, health_router, admin_router, provider_router
 )
 from services.model_service import refresh_all_models
-from config import LLM_PROVIDERS, CURRENT_PROVIDER, CURRENT_MODEL
+from db.session import AsyncSessionLocal
+from db.seed import seed_database
+from services.state import state
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Жизненный цикл приложения"""
-    # Startup
     print("🚀 Запуск сервера...")
+    
+    async with AsyncSessionLocal() as db:
+        await seed_database(db)
+    
     await refresh_all_models()
     
-    any_enabled = any(c["enabled"] for c in LLM_PROVIDERS.values())
-    
-    if any_enabled:
-        print(f"✅ Провайдер: {CURRENT_PROVIDER}, Модель: {CURRENT_MODEL}")
+    if state.current_model:
+        print(f"✅ Провайдер: {state.current_provider}, Модель: {state.current_model}")
     else:
-        print("⚠️ Все провайдеры отключены!")
-        print("   Пароль админки: admin123")
+        print("⚠️ Нет активных провайдеров")
     
-    yield  # Здесь приложение работает
-    
-    # Shutdown (если нужно)
+    yield
     print("👋 Завершение работы...")
 
 
-app = FastAPI(
-    title="Vector DB Compare & Chat",
-    lifespan=lifespan
-)
+app = FastAPI(title="Parts AI Assistant", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,7 +40,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Подключаем роутеры
 app.include_router(health_router.router)
 app.include_router(search_router.router)
 app.include_router(chat_router.router)

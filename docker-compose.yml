@@ -1,6 +1,26 @@
-version: '3.8'
-
 services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: parts-ai-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-partsai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-partsai_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-partsai}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-partsai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - parts-ai-network
+
   backend:
     build:
       context: ./backend
@@ -16,8 +36,12 @@ services:
       - ROUTERAI_URL=${ROUTERAI_URL:-https://routerai.ru/api/v1}
       - ROUTERAI_API_KEY=${ROUTERAI_API_KEY:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
-      - EMBEDDING_DOCS_MODEL=${EMBEDDING_DOCS_MODEL:-intfloat/multilingual-e5-base}
+      - EMBEDDING_DOCS_MODEL=${EMBEDDING_DOCS_MODEL:-BAAI/bge-m3}
       - EMBEDDING_TICKETS_MODEL=${EMBEDDING_TICKETS_MODEL:-qwen/qwen3-embedding-4b}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-partsai}:${POSTGRES_PASSWORD:-partsai_secret}@postgres:5432/${POSTGRES_DB:-partsai}
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - ./backend:/app
       - embedding_cache:/root/.cache
@@ -40,6 +64,7 @@ services:
 
 volumes:
   embedding_cache:
+  postgres_data:
 
 networks:
   parts-ai-network:
