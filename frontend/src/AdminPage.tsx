@@ -24,6 +24,7 @@ const AdminPage: React.FC = () => {
     updateModels, toggleProvider, setApiKey,
   } = useAdmin();
 
+  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [saved, setSaved] = useState(false);
   const [searchSettings, setSearchSettings] = useState({
@@ -48,7 +49,7 @@ const AdminPage: React.FC = () => {
   }, [settings]);
 
   const handleLogin = async () => {
-    const success = await login(password);
+    const success = await login(username, password);
     if (success) {
       setPassword('');
     }
@@ -100,13 +101,20 @@ const AdminPage: React.FC = () => {
 
             <TextField
               fullWidth
+              label="Логин"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              sx={{ mb: 2 }}
+              autoFocus
+            />
+            <TextField
+              fullWidth
               type="password"
               label="Пароль"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
               sx={{ mb: 2 }}
-              autoFocus
             />
             <Button
               fullWidth

@@ -3,6 +3,7 @@ import { AdminSettingsResponse, LLMSettings } from '../types';
 import { adminApi } from '../api/admin';
 import config from '../config';
 
+
 const getToken = () => localStorage.getItem(config.tokenKey) || '';
 const setToken = (token: string) => localStorage.setItem(config.tokenKey, token);
 const clearToken = () => localStorage.removeItem(config.tokenKey);
@@ -21,16 +22,16 @@ export const useAdmin = () => {
     }
   }, []);
 
-  const login = useCallback(async (password: string): Promise<boolean> => {
+  const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
     try {
-      const response = await adminApi.login(password);
-      setToken(response.token);
+      const response = await adminApi.login(username, password);
+      setToken(response.access_token);
       setAuthenticated(true);
       return true;
     } catch (e: any) {
-      const msg = e?.response?.data?.detail || 'Неверный пароль';
+      const msg = e?.response?.data?.detail || 'Неверный логин или пароль';
       setError(msg);
       return false;
     } finally {
@@ -39,15 +40,7 @@ export const useAdmin = () => {
   }, []);
 
   const logout = useCallback(async () => {
-    const token = getToken();
-    if (token) {
-      try {
-        await adminApi.logout(token);
-      } catch (e) {
-        console.error('Logout error:', e);
-      }
-    }
-    clearToken();
+    await adminApi.logout();
     setAuthenticated(false);
     setSettings(null);
   }, []);

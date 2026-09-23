@@ -8,69 +8,55 @@ import {
 import config from '../config';
 
 export const adminApi = {
-  /** Вход в админку */
-  async login(password: string): Promise<LoginResponse> {
-    const response = await client.post<LoginResponse>(config.endpoints.adminLogin, {
-      password,
+  async login(username: string, password: string): Promise<LoginResponse> {
+    const response = await client.post<LoginResponse>('/auth/login', { 
+      username, 
+      password 
     });
     return response.data;
   },
 
-  /** Выход из админки */
-  async logout(token: string): Promise<void> {
-    await client.post(config.endpoints.adminLogout, null, {
-      params: { token },
-    });
+  async logout(): Promise<void> {
+    localStorage.removeItem(config.tokenKey);
   },
 
-  /** Получить настройки */
   async getSettings(): Promise<AdminSettingsResponse> {
-    const response = await client.get<AdminSettingsResponse>(config.endpoints.adminSettings);
+    const response = await client.get('/admin/settings');
     return response.data;
   },
 
-  /** Получить настройки поиска */
-  async getSearchSettings(): Promise<SearchSettings> {
-    const response = await client.get(config.endpoints.adminSearchSettings);
-    return response.data;
-  },
-
-  /** Обновить настройки поиска */
-  async updateSearchSettings(useTickets: boolean, useDocumentation: boolean): Promise<void> {
-    await client.post(config.endpoints.adminSearchSettings, null, {
-      params: { use_tickets: useTickets, use_documentation: useDocumentation },
-    });
-  },
-
-  /** Обновить настройки LLM */
   async updateSettings(settings: LLMSettings): Promise<void> {
-    await client.post(config.endpoints.adminSettings, settings);
+    await client.post('/admin/settings', settings);
   },
 
-  /** Сбросить настройки */
   async resetSettings(): Promise<void> {
-    await client.post(config.endpoints.adminSettingsReset);
+    await client.post('/admin/settings/reset');
   },
 
-  /** Обновить белый список моделей */
   async updateModels(allowed: string[], favorites: string[]): Promise<void> {
-    await client.post(config.endpoints.adminModelsBlock, {
-      allowed,
-      favorites,
-    });
+    await client.post('/admin/models/block', { allowed, favorites });
   },
 
-  /** Включить/выключить провайдера */
   async toggleProvider(provider: string, enabled: boolean): Promise<void> {
-    await client.post(config.endpoints.adminProviderToggle, null, {
+    await client.post('/admin/provider/toggle', null, {
       params: { provider, enabled },
     });
   },
 
-  /** Установить API ключ */
   async setApiKey(provider: string, apiKey: string): Promise<void> {
-    await client.post(config.endpoints.adminProviderApiKey, null, {
+    await client.post('/admin/provider/apikey', null, {
       params: { provider, api_key: apiKey },
+    });
+  },
+
+  async getSearchSettings(): Promise<SearchSettings> {
+    const response = await client.get('/admin/search-settings');
+    return response.data;
+  },
+
+  async updateSearchSettings(useTickets: boolean, useDocumentation: boolean): Promise<void> {
+    await client.post('/admin/search-settings', null, {
+      params: { use_tickets: useTickets, use_documentation: useDocumentation },
     });
   },
 };

@@ -154,8 +154,20 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  token: string;
-  success: boolean;
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  user: {
+    id: number;
+    username: string;
+    email: string | null;
+    role: string | null;
+    group: string | null;
+    group_id: number | null;
+    is_active: boolean;
+    last_login?: string;
+    created_at?: string;
+  };
 }
 
 // ==================== ЧАТ ====================

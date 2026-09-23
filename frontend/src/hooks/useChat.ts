@@ -93,5 +93,7 @@ export const useChat = () => {
     scrollToBottom,
     removeMessage,
     removeProgramSelection,
+    setMessages,      // ← ДОБАВЬ
+    setSessionId,
   };
 };
