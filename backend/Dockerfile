@@ -2,22 +2,24 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Устанавливаем системные зависимости
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Копируем requirements
-COPY requirements.txt .
+RUN pip install --upgrade pip
 
-# Устанавливаем Python зависимости
+# 1. Сначала torch CPU-only (отдельно, чтобы не тянул CUDA)
+RUN pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    torch==2.6.0
+
+# 2. Потом остальные зависимости
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем исходники
 COPY . .
 
-# Создаём директории
 RUN mkdir -p /app/data
 
 EXPOSE 8000

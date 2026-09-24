@@ -50,7 +50,7 @@ async def process_chat(
     model: str,
     session_id: str = None,
     program: Optional[str] = None,
-    user_id: Optional[int] = None,
+    user_id: Optional[int] = None,  # ← ДОБАВЛЕНО
     db: Optional[AsyncSession] = None,
 ) -> Dict:
     """

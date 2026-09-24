@@ -54,5 +54,33 @@ class BlockedModelsUpdate(BaseModel):
     allowed: List[str]
     favorites: List[str]
 
-class LoginRequest(BaseModel):
+
+# ==================== АУТЕНТИФИКАЦИЯ ====================
+
+class RegisterRequest(BaseModel):
+    username: str
     password: str
+    email: Optional[str] = None
+    group_id: Optional[int] = None
+
+
+class AuthLoginRequest(BaseModel):  
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: Dict[str, Any]
+
+
+class UserInfo(BaseModel):
+    id: int
+    username: str
+    email: Optional[str] = None
+    role: Optional[str] = None
+    group: Optional[str] = None
+    group_id: Optional[int] = None
+    is_active: bool = True

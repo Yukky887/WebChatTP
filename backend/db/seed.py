@@ -3,7 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import LLMProvider, LLMSettings, ContextSettings, Program, ProgramKeyword
+from db.models import LLMProvider, LLMSettings, ContextSettings, Program, ProgramKeyword, User, Role
 from config import OLLAMA_URL, LLAMACPP_URL, ROUTERAI_URL, ROUTERAI_API_KEY
 
 
@@ -81,6 +81,23 @@ async def seed_database(db: AsyncSession) -> None:
             docs_limit=5,
         ))
         print("   ✅ Настройки контекста добавлены")
+
+    # ========== АДМИН ПО УМОЛЧАНИЮ ==========
+    result = await db.execute(select(User).where(User.username == "admin"))
+    if not result.scalar_one_or_none():
+        # Получаем роль admin
+        result = await db.execute(select(Role).where(Role.name == "admin"))
+        admin_role = result.scalar_one_or_none()
+        
+        if admin_role:
+            from services.auth_service import hash_password
+            db.add(User(
+                username="admin",
+                password_hash=hash_password("admin123"),
+                role_id=admin_role.id,
+                is_active=True,
+            ))
+            print("🌱 Создан админ: admin / admin123")
     
     # ========== ПРОГРАММЫ ==========
     result = await db.execute(select(Program))

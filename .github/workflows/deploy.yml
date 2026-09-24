@@ -1,0 +1,52 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Ручной запуск
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      - name: Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Deploy to server
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ secrets.PROJECT_PATH }}
+            
+            echo "📥 Pulling latest changes..."
+            git fetch origin
+            git reset --hard origin/main
+            
+            echo "🔨 Rebuilding containers..."
+            docker-compose down
+            docker-compose up -d --build
+            
+            echo "⏳ Waiting for services..."
+            sleep 30
+            
+            echo "🔍 Health check..."
+            curl -f http://localhost:8000/api/health || exit 1
+            
+            echo "✅ Deploy successful!"
+          EOF
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deploy failed!"

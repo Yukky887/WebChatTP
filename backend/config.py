@@ -51,3 +51,9 @@ SEARCH_LIMITS = {
     "parts_resource": 10,
     "parts_intellect": 10
 }
+
+# ==================== JWT ====================
+JWT_SECRET_KEY = get_env("JWT_SECRET_KEY", "change-me-in-production-please")
+JWT_ALGORITHM = "HS256"
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 часа
+JWT_REFRESH_TOKEN_EXPIRE_DAYS = 30
