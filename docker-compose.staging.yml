@@ -44,6 +44,10 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       EMBEDDING_DOCS_MODEL: ${EMBEDDING_DOCS_MODEL}
       EMBEDDING_TICKETS_MODEL: ${EMBEDDING_TICKETS_MODEL}
+    # Watchtower перезапустит контейнер, когда в GHCR появится новый образ :staging
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.scope: staging
     ports:
       - "${BACKEND_PORT:-8001}:8000"
     depends_on:
@@ -58,11 +62,32 @@ services:
   frontend:
     image: ghcr.io/yukky887/webchattp-frontend:staging
     container_name: parts-ai-frontend-staging
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.scope: staging
     ports:
       - "${FRONTEND_PORT:-3001}:80"
     depends_on:
       backend:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - parts-ai-network-staging
+
+  # Автодеплой стенда: опрашивает GHCR и перезапускает backend/frontend,
+  # когда меняется образ :staging. Работает внутри сети — GitHub сюда не достаёт.
+  watchtower:
+    image: nickfedor/watchtower:1.23.1
+    container_name: parts-ai-watchtower-staging
+    environment:
+      WATCHTOWER_SCOPE: staging
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_POLL_INTERVAL: "300"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_ROLLING_RESTART: "true"
+      TZ: ${TZ:-Europe/Moscow}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     networks:
       - parts-ai-network-staging

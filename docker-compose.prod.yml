@@ -47,6 +47,10 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       EMBEDDING_DOCS_MODEL: ${EMBEDDING_DOCS_MODEL}
       EMBEDDING_TICKETS_MODEL: ${EMBEDDING_TICKETS_MODEL}
+    # Watchtower перезапустит контейнер, когда в GHCR обновится образ :latest
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.scope: prod
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -61,11 +65,32 @@ services:
   frontend:
     image: ghcr.io/yukky887/webchattp-frontend:${IMAGE_TAG:-latest}
     container_name: parts-ai-frontend-prod
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.scope: prod
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       backend:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - parts-ai-network-prod
+
+  # Автодеплой прода: подтягивает новый :latest после ручного промоута
+  # (workflow "Deploy to Production"). Работает внутри сети.
+  watchtower:
+    image: nickfedor/watchtower:1.23.1
+    container_name: parts-ai-watchtower-prod
+    environment:
+      WATCHTOWER_SCOPE: prod
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_POLL_INTERVAL: "300"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_ROLLING_RESTART: "true"
+      TZ: ${TZ:-Europe/Moscow}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     networks:
       - parts-ai-network-prod

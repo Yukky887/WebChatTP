@@ -1,7 +1,14 @@
 name: Deploy to Staging
 
-# Автоматический деплой на тестовый стенд при пуше в develop.
-# Сначала собираются и пушатся образы в GHCR, затем Portainer перезапускает стек webcheckdb-staging.
+# Сборка и публикация образов :staging при пуше в develop.
+#
+# Доставку на стенд выполняет Watchtower внутри самого стека (сервис
+# `watchtower` в docker-compose.staging.yml): он раз в 5 минут опрашивает GHCR и
+# перезапускает backend/frontend, когда меняется образ :staging.
+#
+# Почему не webhook/Portainer API: sup5.tradesoft.corp — внутренний хост, а
+# GitHub-hosted раннеры находятся в интернете и его не видят, поэтому прямой
+# запрос к Portainer из workflow невозможен. Watchtower же крутится внутри сети.
 on:
   push:
     branches: [develop]
@@ -18,7 +25,7 @@ env:
 
 jobs:
   build-and-push:
-    name: Build & Push images
+    name: Build & Push images (:staging)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,14 +47,14 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_BACKEND }}
           tags: |
-            type=sha,prefix=sha-,format=short
             type=raw,value=staging
+            type=sha,prefix=sha-
 
       - name: Build & push backend
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
-          file: ./backend/Dockerfile
+          context: backend
+          file: backend/Dockerfile
           push: true
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
@@ -60,57 +67,28 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_FRONTEND }}
           tags: |
-            type=sha,prefix=sha-,format=short
             type=raw,value=staging
+            type=sha,prefix=sha-
 
       - name: Build & push frontend
         uses: docker/build-push-action@v6
         with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
+          context: frontend
+          file: frontend/Dockerfile
           push: true
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    name: Trigger Portainer redeploy
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    environment: staging
-    env:
-      # Секреты нельзя использовать в `if`, поэтому прокидываем через env.
-      PORTAINER_WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK_STAGING }}
-    steps:
-      - name: Trigger Portainer stack webhook
-        if: env.PORTAINER_WEBHOOK != ''
+      - name: Summary
         run: |
-          echo "🚀 Триггерим Portainer webhook (staging)..."
-          curl -fsS -X POST "$PORTAINER_WEBHOOK"
-          echo "✅ Webhook отправлен"
-
-      - name: No webhook configured
-        if: env.PORTAINER_WEBHOOK == ''
-        run: |
-          echo "⚠️ Секрет PORTAINER_WEBHOOK_STAGING не задан — автодеплой пропущен."
-          echo "Настрой Portainer webhook и добавь секрет, см. docs/CI-CD.md"
-
-      - name: Wait for stack to restart
-        if: env.PORTAINER_WEBHOOK != ''
-        run: sleep 45
-
-      - name: Smoke test (/api/health)
-        if: ${{ vars.STAGING_URL != '' }}
-        run: |
-          echo "🔍 Проверяем ${{ vars.STAGING_URL }}/api/health"
-          for i in $(seq 1 10); do
-            if curl -fsS --max-time 10 "${{ vars.STAGING_URL }}/api/health" > /dev/null; then
-              echo "✅ Staging отвечает"
-              exit 0
-            fi
-            echo "Попытка $i не удалась, ждём 10с..."
-            sleep 10
-          done
-          echo "❌ Staging не ответил на /api/health"
-          exit 1
+          {
+            echo "### ✅ Образы :staging собраны и запушены"
+            echo ""
+            echo "- \`ghcr.io/yukky887/webchattp-backend:staging\` (sha-${{ github.sha }})"
+            echo "- \`ghcr.io/yukky887/webchattp-frontend:staging\` (sha-${{ github.sha }})"
+            echo ""
+            echo "Watchtower в стеке staging подхватит новый образ в течение ~5 минут."
+            echo "Проверка вручную: http://sup5.tradesoft.corp:3001/api/health"
+          } >> "$GITHUB_STEP_SUMMARY"
