@@ -89,7 +89,7 @@ Settings → Secrets and variables → Actions:
 
 **Staging** — Stacks → Add stack → name `webcheckdb-staging`:
 
-- [ ] Выбрать **Repository**: репозиторий `Yukky887/WebChatTP`, ветка `develop`,
+- [ ] Выбрать **Repository**: репозиторий `Yukky887/WebChatTP`, Repository reference `refs/heads/develop`,
       Compose path — `docker-compose.staging.yml`.
 - [ ] В **Environment variables** задать значения из `.env.staging.example`
       (свои пароли/ключи, `POSTGRES_DB=partsai_staging` и т.п.).
@@ -98,7 +98,7 @@ Settings → Secrets and variables → Actions:
 
 **Prod** — Stacks → Add stack → name `webcheckdb-prod`:
 
-- [ ] Repository: ветка `main`, Compose path `docker-compose.prod.yml`.
+- [ ] Repository: Repository reference `refs/heads/main`, Compose path `docker-compose.prod.yml`.
 - [ ] Environment variables из `.env.production.example` (+ `IMAGE_TAG=latest`, свои порты).
 - [ ] Deploy the stack.
 - [ ] Включить webhook → GitHub secret `PORTAINER_WEBHOOK_PROD`.

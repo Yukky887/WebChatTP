@@ -77,10 +77,13 @@
 3. **Build method**: **Repository**.
 4. Заполни:
    - **Repository URL**: `https://github.com/Yukky887/WebChatTP`
-   - **Repository reference**: `develop`  ← именно имя ветки, **не** `refs/heads/develop`
+   - **Repository reference**: `refs/heads/develop`  ← полный ref (Portainer 2.39)
    - **Compose path**: `docker-compose.staging.yml`  ← путь от корня репозитория
    - (если репозиторий приватный — включи Authentication и укажи логин/PAT)
 
+> ℹ️ В этом поле нужен **полный git-ref**: ветка — `refs/heads/<branch>`, тег — `refs/tags/<tag>`.
+> Просто `develop` Portainer не находит: `could not find ref "develop"`.
+>
 > ⚠️ Файл `docker-compose.staging.yml` должен быть **закоммичен и запушен** в ветку `develop`.
 > Portainer клонирует репозиторий с GitHub, поэтому локальных (незапушенных) файлов он не видит —
 > ошибка `... docker-compose.staging.yml: no such file or directory` означает именно это.
@@ -100,7 +103,7 @@
 
 Повтори B2 с отличиями:
 - **Name**: `webcheckdb-prod`
-- **Repository reference**: `main`
+- **Repository reference**: `refs/heads/main`
 - **Compose path**: `docker-compose.prod.yml`
 - `POSTGRES_DB` = `partsai`, `BACKEND_PORT` = `8000`, `FRONTEND_PORT` = `3000`
 - добавь переменную `IMAGE_TAG` = `latest`
