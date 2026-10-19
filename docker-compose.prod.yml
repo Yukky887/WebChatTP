@@ -30,7 +30,13 @@ services:
     image: ghcr.io/yukky887/webchattp-backend:${IMAGE_TAG:-latest}
     container_name: parts-ai-backend-prod
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # DSN собирает backend из POSTGRES_* (с URL-кодированием пароля),
+      # см. backend/config.py: build_database_url()
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
       QDRANT_URL: ${QDRANT_URL}
       WEAVIATE_URL: ${WEAVIATE_URL}
       OLLAMA_URL: ${OLLAMA_URL}

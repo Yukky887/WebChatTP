@@ -1,6 +1,7 @@
 # backend/config.py
 import os
 from typing import List
+from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,10 +32,29 @@ EMBEDDING_TICKETS = {
 }
 
 # ==================== БАЗА ДАННЫХ ====================
-DATABASE_URL = get_env(
-    "DATABASE_URL",
-    "postgresql+asyncpg://partsai:partsai_secret@postgres:5432/partsai"
-)
+
+
+def build_database_url() -> str:
+    """Собирает DSN для PostgreSQL.
+
+    Если ``DATABASE_URL`` задан явно — используется как есть. Иначе DSN
+    собирается из отдельных переменных ``POSTGRES_*`` с URL-кодированием
+    пароля, чтобы спецсимволы (``@``, ``:``, ``/``, ``?``, ``#``) не ломали
+    разбор URL (иначе SQLAlchemy режет DSN по первому ``@`` и получается
+    битый хост вида ``pass@part@postgres``).
+    """
+    explicit = get_env("DATABASE_URL")
+    if explicit:
+        return explicit
+    user = get_env("POSTGRES_USER", "partsai")
+    password = quote_plus(get_env("POSTGRES_PASSWORD", "partsai_secret"))
+    host = get_env("POSTGRES_HOST", "localhost")
+    port = get_env("POSTGRES_PORT", "5432")
+    db = get_env("POSTGRES_DB", "partsai")
+    return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
+
+
+DATABASE_URL = build_database_url()
 
 # ==================== АДМИН ====================
 ADMIN_PASSWORD = get_env("ADMIN_PASSWORD", "admin123")
