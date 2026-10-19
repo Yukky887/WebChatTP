@@ -137,6 +137,44 @@ backend/frontend помечены label'ами
 > (Stacks → stack → **Update the stack** / API-ручка `git/redeploy`), потому что
 > стек — git-based: файл compose тянется из ветки в момент redeploy.
 
+### 4.7. Авто-восстановление (autoheal) — уже в compose
+
+Три уровня защиты; первые два уже настроены, руками ничего делать не нужно:
+
+| Что случилось | Кто поднимает | Задержка |
+|---|---|---|
+| Процесс упал / OOM / контейнер вышел | `restart: unless-stopped` (Docker) | секунды |
+| Процесс жив, но приложение не отвечает (healthcheck → `unhealthy`) | сервис `autoheal` (`willfarrell/autoheal`, опрос раз в 30 с) | ~30–60 с |
+| Появилась новая версия образа | Watchtower (см. 4.6) | ≤5 мин |
+
+- Autoheal реагирует только на контейнеры с label `autoheal=true`: сейчас это
+  `backend`, `frontend`, `postgres`.
+- Остановленные **вручную** контейнеры он не поднимает
+  (`AUTOHEAL_ONLY_MONITOR_RUNNING=true`) — можно спокойно останавливать сервис
+  для отладки, Watchtower/autoheal не будут воевать с вами.
+- У `postgres` добавлен `start_period: 60s`, чтобы autoheal не прибил его в
+  момент `initdb` на пустом volume.
+- У `backend` `start_period: 900s` — на холодном кэше модель `bge-m3` качается
+  и грузится долго; пока идёт start period, контейнер считается «starting», а не
+  «unhealthy», и autoheal его не трогает.
+
+> Digest образа autoheal зафиксирован в compose: у апстрима нет версионных
+> тегов, а `willfarrell/autoheal:1.2.0` (2021) **не работает** с этим демоном
+> (Docker Engine 29, `MinAPIVersion 1.44`). Обновлять digest — только проверив
+> на стенде.
+
+Отдельно про фронтенд: в `frontend/nginx.conf` добавлен
+`resolver 127.0.0.11 valid=10s`. Без него nginx резолвит имя `backend` один раз
+при старте и запоминает IP — после любого пересоздания backend-контейнера
+(Watchtower, autoheal, redeploy стека) фронт отдавал бы 502 до собственного
+перезапуска.
+
+**Что остаётся на хосте (проверить один раз руками):** сервер — это Docker Desktop
+4.65 на Windows/WSL2, а не Linux-сервер. Чтобы контейнеры поднимались после
+перезагрузки машины, должны быть включены «Start Docker Desktop when you sign in»
+(и автологин/WSL2-автозапуск). Стек сам себя не поднимет, пока не запустится
+Docker Desktop.
+
 ---
 
 ## 5. Откат (rollback)

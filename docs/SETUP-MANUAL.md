@@ -126,6 +126,21 @@ label'ами `com.centurylinklabs.watchtower.enable=true` и `...scope=staging|p
 > GitHub-раннеры в интернете его не видят. К тому же стековые вебхуки — фича Portainer
 > Business Edition. Watchtower же работает изнутри сети и в CE.
 
+### B6. Авто-восстановление (autoheal) — уже в compose
+
+Тоже ничего включать не нужно: сервис `autoheal` описан в обоих compose-файлах,
+а `backend` / `frontend` / `postgres` помечены label'ом `autoheal=true`.
+
+- Падение процесса лечит `restart: unless-stopped`, «зависание» (healthcheck →
+  `unhealthy`) лечит autoheal — перезапускает контейнер раз в ~30 с проверок.
+- Остановленные вручную контейнеры не поднимаются: можно спокойно останавливать
+  сервис для отладки.
+- Образ запинен по digest: версии `autoheal:1.2.0` не работают с Docker Engine 29.
+
+> На хосте (Docker Desktop на Windows/WSL2) один раз проверь, что включён автозапуск
+> Docker Desktop при входе в систему — иначе после перезагрузки машины контейнеры
+> не поднимутся вообще.
+
 ---
 
 ## Часть C. Проверка, что всё работает
