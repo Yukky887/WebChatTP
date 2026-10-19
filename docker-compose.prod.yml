@@ -93,6 +93,9 @@ services:
       WATCHTOWER_SCOPE: prod
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_POLL_INTERVAL: "300"
+      # без этого Watchtower пропускает контейнеры в рестарт-лупе и не может
+      # вытащить их новой версией образа (ловушка: сломанный образ + рестарт-луп)
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
       WATCHTOWER_CLEANUP: "true"
       TZ: ${TZ:-Europe/Moscow}
     volumes:
