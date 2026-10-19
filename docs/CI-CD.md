@@ -132,6 +132,11 @@ backend/frontend помечены label'ами
 > Первый запуск backend занимает несколько минут: скачивается модель `BAAI/bge-m3`
 > (~2 ГБ) в volume `*_embedding_cache_*`. Дальше она берётся из кэша.
 
+> **Что Watchtower НЕ делает:** он меняет только образы. Правки в самих
+> `docker-compose.*.yml` подхватываются лишь при обновлении стека в Portainer
+> (Stacks → stack → **Update the stack** / API-ручка `git/redeploy`), потому что
+> стек — git-based: файл compose тянется из ветки в момент redeploy.
+
 ---
 
 ## 5. Откат (rollback)
