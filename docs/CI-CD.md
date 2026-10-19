@@ -5,9 +5,15 @@
 ```
  feature/*  ──PR──▶  develop  ──auto──▶  STAGING  ──ручная кнопка+approval──▶  PROD
     │                   │                  │                                     │
-  CI (тесты)         CI + сборка        тыкаешь руками                    только проверенное
-                     образов в GHCR                                       (промоут тех же образов)
+  CI (тесты)         CI + сборка       Watchtower сам                   только проверенное
+                     образов в GHCR    подтягивает образ                (промоут тех же образов)
 ```
+
+> ⚠️ **Почему не webhooks Portainer:** `sup5.tradesoft.corp` — внутренний хост, а
+> GitHub-hosted раннеры работают в интернете и его не видят. Поэтому деплой
+> инициируется **изнутри сети** — контейнером **Watchtower** в самом стеке:
+> он раз в 5 минут опрашивает GHCR и перезапускает контейнер, когда появляется
+> новый образ (`:staging` — на стенде, `:latest` — в проде после промоута).
 
 ---
 
@@ -16,8 +22,8 @@
 | Среда | Где | Как деплоится | Образы |
 |---|---|---|---|
 | **dev** | твой Mac | `docker compose up` | build локально |
-| **staging** | Portainer (стек `webcheckdb-staging`) | автоматически при push в `develop` | `:staging`, `:sha-xxxxxxx` |
-| **prod** | Portainer (стек `webcheckdb-prod`) | вручную (Actions → Deploy to Production) + approval | `:latest`, `:vX.Y.Z` |
+| **staging** | Portainer (стек `webcheckdb-staging`) | push в `develop` → GHCR `:staging` → Watchtower подхватывает | `:staging`, `:sha-xxxxxxx` |
+| **prod** | Portainer (стек `webcheckdb-prod`) | вручную (Actions → Deploy to Production) + approval → GHCR `:latest` → Watchtower | `:latest`, `:vX.Y.Z` |
 
 Образы: `ghcr.io/yukky887/webchattp-backend` и `ghcr.io/yukky887/webchattp-frontend`.
 
@@ -36,14 +42,16 @@
 1. Локально на Mac: меняешь код, проверяешь `docker compose up`.
 2. `git push origin feature/xxx` → создаёшь PR в `develop`.
 3. CI (`.github/workflows/ci.yml`) гоняет тесты backend + сборку frontend. Нужен зелёный чек.
-4. Мержишь PR в `develop` → `.github/workflows/deploy-staging.yml`:
-   собирает образы, пушит в GHCR, дёргает Portainer webhook, ждёт `/api/health`.
-5. Заходишь в staging, **тестируешь руками**. Если что-то не так — правь и снова пуш в `develop`.
+4. Мержишь PR в `develop` → `.github/workflows/deploy-staging.yml` собирает образы и
+   пушит их в GHCR с тегом `:staging`. Дальше **Watchtower** внутри стека staging
+   замечает новый образ и сам перезапускает backend/frontend (опрос каждые ~5 мин).
+5. Заходишь в staging (`http://sup5.tradesoft.corp:3001`), **тестируешь руками**.
+   Если что-то не так — правь и снова пуш в `develop`.
 6. Всё ок → GitHub Actions → **Deploy to Production** → Run workflow:
    - `image_tag` = `staging` (или конкретный `sha-xxxxxxx`),
    - `release_tag` = `v1.2.3` (по желанию).
-   - Ждёшь approval (Required reviewers), после чего образы промоутятся (`:latest` + `:vX.Y.Z`)
-     и Portainer перезапускает прод.
+   - Ждёшь approval (Required reviewers) — образы промоутятся в `:latest` (+ `:vX.Y.Z`),
+     а **Watchtower** прод-стека подтянет новый `:latest` в течение ~5 минут.
 
 ---
 
@@ -68,14 +76,14 @@ Settings → Environments:
 Settings → Secrets and variables → Actions:
 
 **Secrets**
-- [ ] `PORTAINER_WEBHOOK_STAGING` — webhook URL staging-стека из Portainer.
-- [ ] `PORTAINER_WEBHOOK_PROD` — webhook URL prod-стека из Portainer.
+- [ ] Ничего добавлять не нужно. Деплой делает Watchtower, ключи Portainer в CI не используются.
 
-**Variables** (не секреты)
-- [ ] `STAGING_URL` — например `http://sup5.tradesoft.corp:3001` (для smoke-теста).
+**Variables** (не секреты, справочно)
+- [ ] `STAGING_URL` — например `http://sup5.tradesoft.corp:3001`.
 - [ ] `PROD_URL` — например `http://sup5.tradesoft.corp:3000`.
 
 > `GITHUB_TOKEN` уже используется для пуша в GHCR — отдельный токен для CI не нужен.
+> Smoke-тест из workflow не делается: GitHub-раннеры не видят внутреннюю сеть.
 
 ### 4.4. Portainer: доступ к GHCR (чтобы тянуть приватные образы)
 
@@ -93,17 +101,30 @@ Settings → Secrets and variables → Actions:
       Compose path — `docker-compose.staging.yml`.
 - [ ] В **Environment variables** задать значения из `.env.staging.example`
       (свои пароли/ключи, `POSTGRES_DB=partsai_staging` и т.п.).
+      ⚠️ `EMBEDDING_DOCS_MODEL` должен быть `BAAI/bge-m3`, а не название переменной.
 - [ ] Deploy the stack.
-- [ ] Включить **Webhooks** у стека и скопировать URL → в GitHub secret `PORTAINER_WEBHOOK_STAGING`.
 
 **Prod** — Stacks → Add stack → name `webcheckdb-prod`:
 
 - [ ] Repository: Repository reference `refs/heads/main`, Compose path `docker-compose.prod.yml`.
 - [ ] Environment variables из `.env.production.example` (+ `IMAGE_TAG=latest`, свои порты).
 - [ ] Deploy the stack.
-- [ ] Включить webhook → GitHub secret `PORTAINER_WEBHOOK_PROD`.
 
 > Порти для доступа к стендам: staging `3001`/`8001`, prod `3000`/`8000` (задаются `FRONTEND_PORT`/`BACKEND_PORT`).
+
+### 4.6. Watchtower (автодеплой) — уже в compose
+
+Отдельно настраивать ничего не нужно: сервис `watchtower` объявлен в обоих compose-файлах,
+backend/frontend помечены label'ами
+`com.centurylinklabs.watchtower.enable=true` и `...scope=staging|prod`.
+
+- **staging** следит за тегом `:staging`, **prod** — за `:latest`.
+- Опрос GHCR каждые 300 секунд (`WATCHTOWER_POLL_INTERVAL`).
+- Postgres не обновляется (не помечен label'ом).
+- Стенды должны быть запущены — иначе Watchtower не работает (он часть стека).
+
+> Первый запуск backend занимает несколько минут: скачивается модель `BAAI/bge-m3`
+> (~2 ГБ) в volume `*_embedding_cache_*`. Дальше она берётся из кэша.
 
 ---
 
@@ -169,8 +190,8 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 | Файл | Назначение |
 |---|---|
 | `.github/workflows/ci.yml` | Линт + тесты backend, typecheck/build frontend |
-| `.github/workflows/deploy-staging.yml` | Сборка образов → GHCR → авто-деплой staging |
-| `.github/workflows/deploy-prod.yml` | Промоут образов → ручной деплой prod (approval) |
+| `.github/workflows/deploy-staging.yml` | Сборка образов → GHCR `:staging` (деплой — Watchtower) |
+| `.github/workflows/deploy-prod.yml` | Промоут образов → GHCR `:latest` (деплой — Watchtower) |
 | `docker-compose.staging.yml` | Стек staging (образы `:staging`) |
 | `docker-compose.prod.yml` | Стек prod (образы по `IMAGE_TAG`) |
 | `.env.staging.example` / `.env.production.example` | Шаблоны переменных окружения |

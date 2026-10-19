@@ -36,11 +36,9 @@
 
 **Settings** → **Secrets and variables** → **Actions**.
 
-Вкладка **Secrets** → **New repository secret** (добавь после того, как получишь webhook-URL из Portainer, см. B5):
-- `PORTAINER_WEBHOOK_STAGING`
-- `PORTAINER_WEBHOOK_PROD`
+**Секреты не нужны.** Деплой выполняет Watchtower внутри стека, ключи/вебхуки Portainer в CI не используются.
 
-Вкладка **Variables** → **New repository variable**:
+Вкладка **Variables** → **New repository variable** (справочно):
 - `STAGING_URL` = `http://sup5.tradesoft.corp:3001`
 - `PROD_URL` = `http://sup5.tradesoft.corp:3000`
 
@@ -114,14 +112,19 @@
 2. У `parts-ai-backend-*` статус должен стать **healthy** (healthcheck из Dockerfile).
 3. Открой `http://sup5.tradesoft.corp:3001/api/health` (staging) — должен вернуться JSON.
 
-### B5. Включить webhook и забрать URL
+### B5. Watchtower (автодеплой) — уже в compose
 
-1. **Stacks** → открой `webcheckdb-staging`.
-2. Найди блок **Webhooks** (в разных версиях: кнопка/иконка «Webhooks» либо раздел **GitOps updates** → **Webhook**).
-3. ✅ Включи webhook → **Copy link**. URL вида:
-   `http://sup5.tradesoft.corp:9000/api/stacks/webhooks/xxxxxxxx-xxxx-...`
-4. Вставь его в GitHub: **Settings → Secrets and variables → Actions → New repository secret** → `PORTAINER_WEBHOOK_STAGING`.
-5. Повтори то же для `webcheckdb-prod` → секрет `PORTAINER_WEBHOOK_PROD`.
+Отдельно включать ничего не нужно: сервис `watchtower` уже описан в
+`docker-compose.staging.yml` и `docker-compose.prod.yml`, а backend/frontend помечены
+label'ами `com.centurylinklabs.watchtower.enable=true` и `...scope=staging|prod`.
+
+- staging следит за тегом `:staging`, prod — за `:latest`; опрос GHCR каждые 5 минут.
+- Postgres не обновляется (у него нет label'а).
+- Когда в GHCR появляется новый образ, контейнер перезапускается автоматически.
+
+> ⚠️ Вебхуки Portainer здесь не подходят: `sup5.tradesoft.corp` — внутренний хост, а
+> GitHub-раннеры в интернете его не видят. К тому же стековые вебхуки — фича Portainer
+> Business Edition. Watchtower же работает изнутри сети и в CE.
 
 ---
 
@@ -129,8 +132,10 @@
 
 1. Локально: `git checkout -b feature/test && git push -u origin feature/test`.
 2. На GitHub открой PR в `develop` → должен запуститься **CI** (Backend Tests + Frontend Build).
-3. Смержи PR в `develop` → запустится **Deploy to Staging** → через ~1–2 мин проверь `http://sup5.tradesoft.corp:3001`.
-4. **Actions** → **Deploy to Production** → **Run workflow** → `image_tag=staging` → появится запрос approval → подтверди → прод обновится.
+3. Смержи PR в `develop` → запустится **Deploy to Staging** (сборка → GHCR).
+   Watchtower подхватит новый `:staging` в течение ~5 минут — проверь `http://sup5.tradesoft.corp:3001`.
+4. **Actions** → **Deploy to Production** → **Run workflow** → `image_tag=staging` →
+   появится запрос approval → подтверди → в GHCR обновится `:latest` → прод-Watchtower подтянет его за ~5 минут.
 
 ---
 
@@ -138,8 +143,7 @@
 
 | Где | Имя | Значение |
 |---|---|---|
-| GitHub Secret | `PORTAINER_WEBHOOK_STAGING` | webhook staging-стека (B5) |
-| GitHub Secret | `PORTAINER_WEBHOOK_PROD` | webhook prod-стека (B5) |
+| GitHub Secret | — | не требуется (деплой через Watchtower) |
 | GitHub Variable | `STAGING_URL` | `http://sup5.tradesoft.corp:3001` |
 | GitHub Variable | `PROD_URL` | `http://sup5.tradesoft.corp:3000` |
 | Portainer Registry | password | GitHub PAT (`read:packages`) |
