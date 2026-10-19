@@ -3,13 +3,43 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import LLMProvider, LLMSettings, ContextSettings, Program, ProgramKeyword, User, Role
+from db.models import LLMProvider, LLMSettings, ContextSettings, Program, ProgramKeyword, User, Role, Group
 from config import OLLAMA_URL, LLAMACPP_URL, ROUTERAI_URL, ROUTERAI_API_KEY
 
 
 async def seed_database(db: AsyncSession) -> None:
     """Заполняет БД начальными данными если пусто"""
-    
+
+    # ========== РОЛИ ==========
+    result = await db.execute(select(Role))
+    if not result.scalars().first():
+        print("🌱 Seeding roles...")
+        roles = [
+            Role(name="admin", description="Администратор системы"),
+            Role(name="manager", description="Менеджер"),
+            Role(name="user", description="Обычный пользователь"),
+            Role(name="viewer", description="Только просмотр"),
+        ]
+        for r in roles:
+            db.add(r)
+        await db.flush()
+        print(f"   ✅ Добавлено {len(roles)} ролей")
+
+    # ========== ГРУППЫ ==========
+    result = await db.execute(select(Group))
+    if not result.scalars().first():
+        print("🌱 Seeding groups...")
+        groups = [
+            Group(name="Отдел продаж", description="Менеджеры по продажам"),
+            Group(name="Техподдержка", description="Специалисты технической поддержки"),
+            Group(name="Разработка", description="Разработчики и тестировщики"),
+            Group(name="Руководство", description="Руководящий состав"),
+        ]
+        for g in groups:
+            db.add(g)
+        await db.flush()
+        print(f"   ✅ Добавлено {len(groups)} групп")
+
     # ========== ПРОВАЙДЕРЫ ==========
     result = await db.execute(select(LLMProvider))
     if not result.scalars().first():
@@ -91,13 +121,14 @@ async def seed_database(db: AsyncSession) -> None:
         
         if admin_role:
             from services.auth_service import hash_password
+            from config import ADMIN_PASSWORD
             db.add(User(
                 username="admin",
-                password_hash=hash_password("admin123"),
+                password_hash=hash_password(ADMIN_PASSWORD),
                 role_id=admin_role.id,
                 is_active=True,
             ))
-            print("🌱 Создан админ: admin / admin123")
+            print("🌱 Создан админ: admin (пароль из ADMIN_PASSWORD)")
     
     # ========== ПРОГРАММЫ ==========
     result = await db.execute(select(Program))

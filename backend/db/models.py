@@ -1,7 +1,7 @@
 """SQLAlchemy модели"""
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, 
-    ForeignKey, DECIMAL, BigInteger, UniqueConstraint
+    ForeignKey, DECIMAL, BigInteger, UniqueConstraint, text
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -40,8 +40,8 @@ class User(Base):
     username = Column(String(100), unique=True, nullable=False)
     email = Column(String(255), unique=True)
     password_hash = Column(String(255), nullable=False)
-    role_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
-    group_id = Column(Integer, ForeignKey('groups.id'))
+    role_id = Column(Integer, ForeignKey('roles.id'), nullable=False, index=True)
+    group_id = Column(Integer, ForeignKey('groups.id'), index=True)
     is_active = Column(Boolean, default=True)
     last_login = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -72,7 +72,7 @@ class LLMModel(Base):
     __table_args__ = (UniqueConstraint('provider_id', 'name'),)
     
     id = Column(Integer, primary_key=True)
-    provider_id = Column(String(50), ForeignKey('llm_providers.id', ondelete='CASCADE'), nullable=False)
+    provider_id = Column(String(50), ForeignKey('llm_providers.id', ondelete='CASCADE'), nullable=False, index=True)
     name = Column(String(200), nullable=False)
     display_name = Column(String(200))
     context_size = Column(Integer)
@@ -131,7 +131,7 @@ class ProgramKeyword(Base):
     __table_args__ = (UniqueConstraint('program_id', 'keyword'),)
     
     id = Column(Integer, primary_key=True)
-    program_id = Column(String(50), ForeignKey('programs.id', ondelete='CASCADE'), nullable=False)
+    program_id = Column(String(50), ForeignKey('programs.id', ondelete='CASCADE'), nullable=False, index=True)
     keyword = Column(String(200), nullable=False)
     weight = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -142,8 +142,8 @@ class ProgramKeyword(Base):
 class ChatSession(Base):
     __tablename__ = 'chat_sessions'
     
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default='gen_random_uuid()')
-    user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'))
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text('gen_random_uuid()'))
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), index=True)
     provider_id = Column(String(50), ForeignKey('llm_providers.id'))
     model_id = Column(Integer, ForeignKey('llm_models.id'))
     selected_program = Column(String(50), ForeignKey('programs.id'))
@@ -159,11 +159,11 @@ class Message(Base):
     __tablename__ = 'messages'
     
     id = Column(BigInteger, primary_key=True)
-    session_id = Column(UUID(as_uuid=True), ForeignKey('chat_sessions.id', ondelete='CASCADE'), nullable=False)
+    session_id = Column(UUID(as_uuid=True), ForeignKey('chat_sessions.id', ondelete='CASCADE'), nullable=False, index=True)
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     program_id = Column(String(50), ForeignKey('programs.id'))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     
     session = relationship('ChatSession', back_populates='messages')
     sources = relationship('MessageSource', back_populates='message', cascade='all, delete-orphan')
@@ -209,7 +209,7 @@ class MessageFeedback(Base):
     __table_args__ = (UniqueConstraint('message_id', 'user_id'),)
     
     id = Column(BigInteger, primary_key=True)
-    message_id = Column(BigInteger, ForeignKey('messages.id', ondelete='CASCADE'), nullable=False)
+    message_id = Column(BigInteger, ForeignKey('messages.id', ondelete='CASCADE'), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     rating = Column(String(10), nullable=False)
     comment = Column(Text)

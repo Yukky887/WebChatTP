@@ -1,0 +1,14 @@
+# Node
+node_modules/
+build/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Прочее
+.git/
+.gitignore
+*.log
+README.md

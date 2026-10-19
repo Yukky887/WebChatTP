@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+# backend/ лежит в sys.path, чтобы работали абсолютные импорты (services.*, db.*, config)
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+norecursedirs = ["venv", "__pycache__", "node_modules", "data"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = ["venv", "__pycache__", "node_modules"]
+
+[tool.ruff.lint]
+# Пока проверяем только явные ошибки, чтобы не заваливать CI на легаси-коде.
+select = ["E9", "F63", "F7", "F82"]
+ignore = []

@@ -1,0 +1,96 @@
+name: Deploy to Production
+
+# Ручной деплой в прод. Запускается ТОЛЬКО вручную (Actions -> Run workflow)
+# и требует approval через GitHub Environment "production" (Required reviewers).
+#
+# Промоутит уже проверенные в staging образы: ничего не пересобирает,
+# а только перевешивает теги -> каталог точно совпадает со staging.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Тег образа-источника (обычно staging или sha-xxxxxxx)'
+        required: true
+        default: 'staging'
+      release_tag:
+        description: 'Релизный тег (например v1.2.3). Необязательно.'
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BACKEND: yukky887/webchattp-backend
+  IMAGE_FRONTEND: yukky887/webchattp-frontend
+
+jobs:
+  promote:
+    name: Promote & Deploy
+    runs-on: ubuntu-latest
+    environment: production # требуются Required reviewers
+    env:
+      # Секреты нельзя использовать в `if`, поэтому прокидываем через env.
+      PORTAINER_WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK_PROD }}
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull source images
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_BACKEND }}:${{ inputs.image_tag }}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_FRONTEND }}:${{ inputs.image_tag }}
+
+      - name: Retag & push (latest + release tag)
+        run: |
+          SRC_BACKEND="${{ env.REGISTRY }}/${{ env.IMAGE_BACKEND }}:${{ inputs.image_tag }}"
+          SRC_FRONTEND="${{ env.REGISTRY }}/${{ env.IMAGE_FRONTEND }}:${{ inputs.image_tag }}"
+
+          if [ -n "${{ inputs.release_tag }}" ]; then
+            docker tag "$SRC_BACKEND"  "${{ env.REGISTRY }}/${{ env.IMAGE_BACKEND }}:${{ inputs.release_tag }}"
+            docker tag "$SRC_FRONTEND" "${{ env.REGISTRY }}/${{ env.IMAGE_FRONTEND }}:${{ inputs.release_tag }}"
+            docker push "${{ env.REGISTRY }}/${{ env.IMAGE_BACKEND }}:${{ inputs.release_tag }}"
+            docker push "${{ env.REGISTRY }}/${{ env.IMAGE_FRONTEND }}:${{ inputs.release_tag }}"
+          fi
+
+          docker tag "$SRC_BACKEND"  "${{ env.REGISTRY }}/${{ env.IMAGE_BACKEND }}:latest"
+          docker tag "$SRC_FRONTEND" "${{ env.REGISTRY }}/${{ env.IMAGE_FRONTEND }}:latest"
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_BACKEND }}:latest"
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_FRONTEND }}:latest"
+
+      - name: Trigger Portainer stack webhook
+        if: env.PORTAINER_WEBHOOK != ''
+        run: |
+          echo "🚀 Триггерим Portainer webhook (prod)..."
+          curl -fsS -X POST "$PORTAINER_WEBHOOK"
+          echo "✅ Webhook отправлен"
+
+      - name: No webhook configured
+        if: env.PORTAINER_WEBHOOK == ''
+        run: |
+          echo "⚠️ Секрет PORTAINER_WEBHOOK_PROD не задан."
+          echo "Задеплой вручную в Portainer (IMAGE_TAG=latest), см. docs/CI-CD.md"
+
+      - name: Wait for stack to restart
+        if: env.PORTAINER_WEBHOOK != ''
+        run: sleep 45
+
+      - name: Smoke test (/api/health)
+        if: ${{ vars.PROD_URL != '' }}
+        run: |
+          echo "🔍 Проверяем ${{ vars.PROD_URL }}/api/health"
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 10 "${{ vars.PROD_URL }}/api/health" > /dev/null; then
+              echo "✅ Prod отвечает"
+              exit 0
+            fi
+            echo "Попытка $i не удалась, ждём 10с..."
+            sleep 10
+          done
+          echo "❌ Prod не ответил на /api/health"
+          exit 1

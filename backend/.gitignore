@@ -88,3 +88,6 @@ temp/
 # Docker
 .docker/
 docker-compose.override.yml
+
+.env.production
+.env.prod

@@ -1,0 +1,38 @@
+# ==================== Секреты / окружение ====================
+# Реальные .env-файлы не коммитим, только *.example
+.env
+.env.local
+.env.staging
+.env.production
+.env.prod
+.env.*.local
+.ci-setup.env
+
+# ...но примеры оставляем в репозитории
+!.env.example
+!.env.staging.example
+!.env.production.example
+
+# ==================== macOS / IDE ====================
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# ==================== Node ====================
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ==================== Прочее ====================
+*.log

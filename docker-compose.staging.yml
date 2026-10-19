@@ -1,0 +1,70 @@
+# docker-compose.staging.yml
+# Стек тестового (pre-prod) стенда. Образы тянутся из GHCR с тегом :staging.
+#
+# Значения переменных задаются:
+#   - в Portainer: Stacks -> <stack> -> Environment variables (рекомендуется)
+#   - локально:    docker compose --env-file .env.staging -f docker-compose.staging.yml up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: parts-ai-postgres-staging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data_staging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - parts-ai-network-staging
+
+  backend:
+    image: ghcr.io/yukky887/webchattp-backend:staging
+    container_name: parts-ai-backend-staging
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      QDRANT_URL: ${QDRANT_URL}
+      WEAVIATE_URL: ${WEAVIATE_URL}
+      OLLAMA_URL: ${OLLAMA_URL}
+      LLAMACPP_URL: ${LLAMACPP_URL}
+      ROUTERAI_URL: ${ROUTERAI_URL}
+      ROUTERAI_API_KEY: ${ROUTERAI_API_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      EMBEDDING_DOCS_MODEL: ${EMBEDDING_DOCS_MODEL}
+      EMBEDDING_TICKETS_MODEL: ${EMBEDDING_TICKETS_MODEL}
+    ports:
+      - "${BACKEND_PORT:-8001}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - embedding_cache_staging:/root/.cache
+    restart: unless-stopped
+    networks:
+      - parts-ai-network-staging
+
+  frontend:
+    image: ghcr.io/yukky887/webchattp-frontend:staging
+    container_name: parts-ai-frontend-staging
+    ports:
+      - "${FRONTEND_PORT:-3001}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - parts-ai-network-staging
+
+volumes:
+  embedding_cache_staging:
+  postgres_data_staging:
+
+networks:
+  parts-ai-network-staging:
+    driver: bridge

@@ -7,8 +7,8 @@ WORKDIR /app
 COPY package.json ./
 COPY package-lock.json* ./
 
-# Устанавливаем зависимости
-RUN npm install
+# Ставим зависимости по lock-файлу (воспроизводимая сборка)
+RUN npm ci
 
 # Копируем исходники
 COPY . .

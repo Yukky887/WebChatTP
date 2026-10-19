@@ -1,0 +1,73 @@
+# docker-compose.prod.yml
+# Продовый стек. Образы тянутся из GHCR (промоут из staging теми же тегами).
+#
+# Значения переменных задаются:
+#   - в Portainer: Stacks -> <stack> -> Environment variables (рекомендуется)
+#   - локально:    docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+#
+# IMAGE_TAG определяет, какую версию образов тянуть (latest / vX.Y.Z / sha-xxxxxxx).
+# Для отката достаточно поменять IMAGE_TAG на предыдущий тег и перезапустить стек.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: parts-ai-postgres-prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - parts-ai-network-prod
+
+  backend:
+    image: ghcr.io/yukky887/webchattp-backend:${IMAGE_TAG:-latest}
+    container_name: parts-ai-backend-prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      QDRANT_URL: ${QDRANT_URL}
+      WEAVIATE_URL: ${WEAVIATE_URL}
+      OLLAMA_URL: ${OLLAMA_URL}
+      LLAMACPP_URL: ${LLAMACPP_URL}
+      ROUTERAI_URL: ${ROUTERAI_URL}
+      ROUTERAI_API_KEY: ${ROUTERAI_API_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      EMBEDDING_DOCS_MODEL: ${EMBEDDING_DOCS_MODEL}
+      EMBEDDING_TICKETS_MODEL: ${EMBEDDING_TICKETS_MODEL}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - embedding_cache_prod:/root/.cache
+    restart: unless-stopped
+    networks:
+      - parts-ai-network-prod
+
+  frontend:
+    image: ghcr.io/yukky887/webchattp-frontend:${IMAGE_TAG:-latest}
+    container_name: parts-ai-frontend-prod
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - parts-ai-network-prod
+
+volumes:
+  embedding_cache_prod:
+  postgres_data_prod:
+
+networks:
+  parts-ai-network-prod:
+    driver: bridge
