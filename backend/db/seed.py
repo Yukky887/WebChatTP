@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import LLMProvider, LLMSettings, ContextSettings, Program, ProgramKeyword, User, Role, Group
-from config import OLLAMA_URL, LLAMACPP_URL, ROUTERAI_URL, ROUTERAI_API_KEY
+from config import OLLAMA_URL, LLAMACPP_URL, ROUTERAI_URL, ROUTERAI_API_KEY, GEMINI_URL
 
 
 async def seed_database(db: AsyncSession) -> None:
@@ -41,39 +41,54 @@ async def seed_database(db: AsyncSession) -> None:
         print(f"   ✅ Добавлено {len(groups)} групп")
 
     # ========== ПРОВАЙДЕРЫ ==========
+    # Идемпотентно: добавляем только отсутствующие записи. Существующих не
+    # трогаем — админ мог изменить is_enabled/priority/ключ через админку,
+    # и эти изменения не должны затираться при каждом рестарте.
     result = await db.execute(select(LLMProvider))
-    if not result.scalars().first():
-        print("🌱 Seeding llm_providers...")
-        providers = [
-            LLMProvider(
-                id="ollama",
-                name="Ollama (локальный)",
-                base_url=OLLAMA_URL,
-                api_type="ollama",
-                is_enabled=False,
-                priority=1,
-            ),
-            LLMProvider(
-                id="llamacpp",
-                name="llama.cpp (Gemma)",
-                base_url=LLAMACPP_URL,
-                api_type="openai",
-                is_enabled=True,
-                priority=2,
-            ),
-            LLMProvider(
-                id="routerai",
-                name="RouterAI (облачный)",
-                base_url=ROUTERAI_URL,
-                api_type="openai",
-                api_key_encrypted=ROUTERAI_API_KEY,
-                is_enabled=False,
-                priority=3,
-            ),
-        ]
-        for p in providers:
-            db.add(p)
-        print(f"   ✅ Добавлено {len(providers)} провайдеров")
+    existing_provider_ids = {p.id for p in result.scalars().all()}
+    providers = [
+        LLMProvider(
+            id="ollama",
+            name="Ollama (локальный)",
+            base_url=OLLAMA_URL,
+            api_type="ollama",
+            is_enabled=False,
+            priority=1,
+        ),
+        LLMProvider(
+            id="llamacpp",
+            name="llama.cpp (Gemma)",
+            base_url=LLAMACPP_URL,
+            api_type="openai",
+            is_enabled=True,
+            priority=2,
+        ),
+        LLMProvider(
+            id="routerai",
+            name="RouterAI (облачный)",
+            base_url=ROUTERAI_URL,
+            api_type="openai",
+            api_key_encrypted=ROUTERAI_API_KEY,
+            is_enabled=False,
+            priority=3,
+        ),
+        LLMProvider(
+            id="gemini",
+            name="Google Gemini (free tier)",
+            base_url=GEMINI_URL,
+            api_type="openai",
+            is_enabled=False,
+            priority=4,
+        ),
+    ]
+    added_providers = [p for p in providers if p.id not in existing_provider_ids]
+    for p in added_providers:
+        db.add(p)
+    if added_providers:
+        print(
+            "🌱 Seeding llm_providers: +"
+            f"{len(added_providers)} ({', '.join(p.id for p in added_providers)})"
+        )
     
     # ========== НАСТРОЙКИ LLM ==========
     result = await db.execute(select(LLMSettings))

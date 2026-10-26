@@ -21,6 +21,13 @@ LLAMACPP_URL = get_env("LLAMACPP_URL", "http://192.168.0.254:8080/v1")
 ROUTERAI_URL = get_env("ROUTERAI_URL", "https://routerai.ru/api/v1")
 ROUTERAI_API_KEY = get_env("ROUTERAI_API_KEY", "")
 
+# OpenAI-совместимый слой Gemini — позволяет подключить Google как обычного
+# провайдера (api_type="openai") без отдельной ветки в llm_providers.
+# Ключ задаётся не через env, а в админке (POST /api/admin/provider/apikey).
+GEMINI_URL = get_env(
+    "GEMINI_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
+)
+
 # ==================== ЭМБЕДДИНГИ ====================
 EMBEDDING_DOCS_MODEL = get_env("EMBEDDING_DOCS_MODEL", "intfloat/multilingual-e5-base")
 
