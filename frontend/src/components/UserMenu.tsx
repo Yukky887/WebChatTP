@@ -12,6 +12,7 @@ export const UserMenu: React.FC = () => {
   
   const handleLogout = () => {
     localStorage.removeItem('user_token');
+    localStorage.removeItem('refresh_token');
     localStorage.removeItem('user_info');
     window.location.reload();
   };

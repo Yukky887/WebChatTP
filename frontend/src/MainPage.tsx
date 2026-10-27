@@ -117,13 +117,17 @@ const MainPage: React.FC = () => {
                       </ListItemIcon>
                       <ListItemText
                         primary={
-                          session.selected_program === 'intellect' 
-                            ? '🧠 Intellect' 
-                            : session.selected_program === 'resource'
-                              ? '🔧 Resource'
-                              : '💬 Чат'
+                          session.title?.trim()
+                            ? session.title
+                            : session.selected_program === 'intellect'
+                              ? '🧠 Intellect'
+                              : session.selected_program === 'resource'
+                                ? '🔧 Resource'
+                                : '💬 Чат'
                         }
-                        secondary={new Date(session.created_at).toLocaleDateString('ru-RU', {
+                        secondary={new Date(
+                          session.updated_at || session.created_at
+                        ).toLocaleDateString('ru-RU', {
                           day: '2-digit',
                           month: '2-digit',
                           hour: '2-digit',

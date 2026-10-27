@@ -28,6 +28,7 @@ async def get_my_sessions(
     return [
         {
             "id": str(s.id),
+            "title": s.title,
             "provider_id": s.provider_id,
             "selected_program": s.selected_program,
             "status": s.status,

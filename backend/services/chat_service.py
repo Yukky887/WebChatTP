@@ -44,6 +44,17 @@ def truncate_content(content: str, max_length: int = 15000) -> str:
     )
 
 
+def make_session_title(text: str, max_length: int = 60) -> str:
+    """Название чата по первому вопросу пользователя"""
+    first_line = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+    title = " ".join(first_line.split())
+    if not title:
+        return "Новый чат"
+    if len(title) > max_length:
+        title = title[:max_length].rstrip() + "…"
+    return title
+
+
 async def process_chat(
     message: str,
     provider: str,
@@ -75,6 +86,10 @@ async def process_chat(
             user_id=user_id,
             provider_id=provider,
         )
+        if db_session is None:
+            # Сессия принадлежит другому пользователю — начинаем новую,
+            # чтобы не писать сообщения в чужую историю
+            db_session = await chat_repo.create_session(user_id=user_id, provider_id=provider)
         session_id = str(db_session.id)
     
     if not session_id:
@@ -99,6 +114,11 @@ async def process_chat(
             role="user",
             content=message,
         )
+        # Название чата — по первому вопросу
+        if not db_session.title:
+            await chat_repo.set_session_title(
+                db_session.id, make_session_title(message)
+            )
     
     # ========== НЕТ ПРОГРАММЫ ==========
     if not detected_program:

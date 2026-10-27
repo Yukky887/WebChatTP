@@ -147,6 +147,7 @@ class ChatSession(Base):
     provider_id = Column(String(50), ForeignKey('llm_providers.id'))
     model_id = Column(Integer, ForeignKey('llm_models.id'))
     selected_program = Column(String(50), ForeignKey('programs.id'))
+    title = Column(String(255))  # Автоназвание по первому вопросу пользователя
     status = Column(String(20), default='active')
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

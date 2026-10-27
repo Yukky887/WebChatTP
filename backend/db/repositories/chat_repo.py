@@ -43,12 +43,29 @@ class ChatRepository:
         self,
         session_id: Optional[UUID] = None,
         **kwargs
-    ) -> ChatSession:
-        """Получает или создаёт сессию"""
+    ) -> Optional[ChatSession]:
+        """Получает или создаёт сессию.
+
+        Возвращает None, если сессия с таким id — чужая: тогда чат продолжится
+        в новой сессии, а история другого пользователя не доступна.
+
+        Сессии без владельца (гостевые, а также созданные при истёкшем токене,
+        когда передавался user_id=None) привязываются к текущему пользователю —
+        так восстановление истории происходит автоматически.
+        """
+        user_id = kwargs.get("user_id")
+
         if session_id:
             session = await self.get_session(session_id)
-            if session:
+            if session is not None:
+                owner = session.user_id
+                if owner is not None and (user_id is None or owner != user_id):
+                    return None
+                if owner is None and user_id is not None:
+                    session.user_id = user_id
+                    await self.db.commit()
                 return session
+
         return await self.create_session(session_id=session_id, **kwargs)
 
     async def add_message(
@@ -69,6 +86,14 @@ class ChatRepository:
         )
         self.db.add(message)
         await self.db.flush()  # Чтобы получить message.id
+
+        # Обновляем updated_at сессии — от него зависит сортировка истории
+        result = await self.db.execute(
+            select(ChatSession).where(ChatSession.id == session_id)
+        )
+        session = result.scalar_one_or_none()
+        if session:
+            session.updated_at = datetime.utcnow()
 
         # Добавляем источники
         if sources:
@@ -123,6 +148,13 @@ class ChatRepository:
         if session:
             session.selected_program = program
             session.updated_at = datetime.utcnow()
+            await self.db.commit()
+
+    async def set_session_title(self, session_id: UUID, title: str) -> None:
+        """Задает название сессии"""
+        session = await self.get_session(session_id)
+        if session:
+            session.title = title[:255]
             await self.db.commit()
 
     async def delete_session(self, session_id: UUID) -> None:

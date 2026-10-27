@@ -2,6 +2,7 @@ import client from './client';
 
 export interface ChatSessionInfo {
   id: string;
+  title: string | null;
   provider_id: string;
   selected_program: string | null;
   status: string;

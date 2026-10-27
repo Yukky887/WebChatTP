@@ -29,6 +29,9 @@ const LoginPage: React.FC = () => {
       const response = await axios.post(`${config.apiBaseUrl}${endpoint}`, payload);
       
       localStorage.setItem('user_token', response.data.access_token);
+      if (response.data.refresh_token) {
+        localStorage.setItem('refresh_token', response.data.refresh_token);
+      }
       localStorage.setItem('user_info', JSON.stringify(response.data.user));
       
       // Редирект
