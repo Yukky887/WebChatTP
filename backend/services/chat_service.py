@@ -62,12 +62,15 @@ async def process_chat(
     session_id: str = None,
     program: Optional[str] = None,
     user_id: Optional[int] = None,  # ← ДОБАВЛЕНО
+    attachments: Optional[List[str]] = None,
     db: Optional[AsyncSession] = None,
 ) -> Dict:
     """
-    Обрабатывает сообщение чата с сохранением в БД
+    Обрабатывает сообщение чата с сохранением в БД.
+    `attachments` — data URI изображений; если есть — идёт в vision-режим
+    (без выбора программы и без RAG-поиска).
     """
-    # Работаем с БД если передана сессия
+    has_images = bool(attachments)
     chat_repo = ChatRepository(db) if db else None
     
     # Парсим UUID сессии
@@ -102,26 +105,32 @@ async def process_chat(
         history = [{"role": m.role, "content": m.content} for m in messages]
     
     # ========== ОПРЕДЕЛЯЕМ ПРОГРАММУ ==========
-    if program:
+    if has_images:
+        # Vision-сообщение не требует выбора программы
+        detected_program = program
+    elif program:
         detected_program = program
     else:
         detected_program = classifier.classify(message)
-    
+
+    # Что сохранить в историю (текст; картинка живёт только в этом сообщении)
+    stored_content = (message or "").strip() or "📎 [изображение]"
+
     # Сохраняем вопрос в БД
     if chat_repo and db_session:
         await chat_repo.add_message(
             session_id=db_session.id,
             role="user",
-            content=message,
+            content=stored_content,
         )
-        # Название чата — по первому вопросу
+        # Название чата — по первому вопросу (учитываем и текст из image-only сообщений)
         if not db_session.title:
             await chat_repo.set_session_title(
-                db_session.id, make_session_title(message)
+                db_session.id, make_session_title(stored_content)
             )
-    
-    # ========== НЕТ ПРОГРАММЫ ==========
-    if not detected_program:
+
+    # ========== НЕТ ПРОГРАММЫ (только для текстовых сообщений) ==========
+    if not detected_program and not has_images:
         return {
             "session_id": session_id,
             "answer": "",
@@ -137,15 +146,20 @@ async def process_chat(
         }
     
     # Обновляем программу в сессии
-    if chat_repo and db_session:
+    if chat_repo and db_session and detected_program:
         await chat_repo.update_session_program(db_session.id, detected_program)
     
-    # ========== ПОИСК ==========
-    print(f"🔍 [{detected_program}] Поиск: {message[:50]}...")
-    search_results = await search_all(message, program=detected_program, db=db)
-    
-    tickets = [r for r in search_results if r.get("type") == "ticket"][:10]
-    docs = [r for r in search_results if r.get("type") == "documentation"][:10]
+    # ========== ПОИСК (только для текстовых сообщений; у картинок RAG не гоняем) ==========
+    tickets: List[Dict] = []
+    docs: List[Dict] = []
+    context_text = ""
+
+    if not has_images:
+        print(f"🔍 [{detected_program}] Поиск: {message[:50]}...")
+        search_results = await search_all(message, program=detected_program, db=db)
+
+        tickets = [r for r in search_results if r.get("type") == "ticket"][:10]
+        docs = [r for r in search_results if r.get("type") == "documentation"][:10]
     
     # ========== КОНТЕКСТ ==========
     context_parts = []
@@ -200,10 +214,31 @@ async def process_chat(
 4. Если информации недостаточно — скажи об этом
 """
     
+    if has_images:
+        # Vision-режим: гибрид «транскрипция + анализ» вместо RAG-промпта
+        system_prompt = """Ты - ассистент технической поддержки ПО Parts.Intellect / Parts.Resource.
+
+Пользователь отправил изображение (скриншот интерфейса, фото документа, сообщение об ошибке и т.п.).
+
+Алгоритм ответа:
+1. Если на изображении есть текст - сначала полностью извлеки его, сохранив структуру (заголовки, поля, кнопки, сообщения об ошибках).
+2. Затем ответь на вопрос пользователя по существу изображения: что происходит, вероятная причина, что сделать.
+3. Если вопрос не задан - кратко опиши изображение и укажи, на что обратить внимание.
+4. Если данных недостаточно - задай уточняющий вопрос.
+
+Отвечай по-русски, кратко и структурированно."""
+
     # ========== ЗАПРОС К LLM ==========
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(history[-10:])
-    messages.append({"role": "user", "content": message})
+    if has_images:
+        # Последнее сообщение пользователя — контент-массив: текст + изображения
+        user_parts: List[Dict] = [{"type": "text", "text": message or "Извлеки текст и опиши изображение."}]
+        for uri in attachments or []:
+            user_parts.append({"type": "image_url", "image_url": {"url": uri}})
+        messages.append({"role": "user", "content": user_parts})
+    else:
+        messages.append({"role": "user", "content": message})
     
     provider_repo = ProviderRepository(db)
     provider_db = None
@@ -222,6 +257,7 @@ async def process_chat(
         api_key=provider_db.api_key_encrypted or "",
         model=model,
         messages=messages,
+        max_tokens_limit=1500 if has_images else None,  # vision-ответы не длиннее ~1500 токенов
         db=db,
     )
     answer = result["content"]

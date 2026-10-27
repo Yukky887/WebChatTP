@@ -33,6 +33,7 @@ async def chat_completion(
     model: str,
     messages: List[Dict],
     db: AsyncSession,
+    max_tokens_limit: int = None,  # опциональный потолок ответных токенов (vision)
 ) -> Dict:
     """
     Универсальный запрос к LLM.
@@ -45,19 +46,32 @@ async def chat_completion(
     llm_settings = await settings_repo.get_llm_settings()
     
     if api_type == "ollama":
-        return await _ollama_chat(client, model, messages, llm_settings)
+        return await _ollama_chat(client, model, messages, llm_settings, max_tokens_limit)
     else:
-        return await _openai_chat(client, model, messages, llm_settings, provider_id)
+        return await _openai_chat(client, model, messages, llm_settings, provider_id, max_tokens_limit)
 
 
-async def _ollama_chat(client, model, messages, settings) -> Dict:
+def _content_text(content) -> str:
+    """Безопасно извлекает текст из content (str или массив частей)"""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(
+            p.get("text", "") for p in content
+            if isinstance(p, dict) and p.get("type") == "text"
+        )
+    return ""
+
+
+async def _ollama_chat(client, model, messages, settings, max_tokens_limit=None) -> Dict:
+    limit = max_tokens_limit or settings.max_tokens
     resp = await client.post("/api/chat", json={
         "model": model,
         "messages": messages,
         "stream": False,
         "options": {
             "temperature": float(settings.temperature),
-            "num_predict": settings.max_tokens,
+            "num_predict": min(int(limit), int(settings.max_tokens)),
             "top_p": float(settings.top_p),
             "repeat_penalty": float(settings.repeat_penalty),
             "num_ctx": settings.num_ctx,
@@ -67,7 +81,7 @@ async def _ollama_chat(client, model, messages, settings) -> Dict:
     if resp.status_code == 200:
         data = resp.json()
         content = data.get("message", {}).get("content", "")
-        pt = sum(len(m["content"]) // 4 for m in messages)
+        pt = sum(len(_content_text(m.get("content", ""))) // 4 for m in messages)
         ct = len(content) // 4
         return {
             "content": content,
@@ -82,12 +96,12 @@ async def _ollama_chat(client, model, messages, settings) -> Dict:
     raise Exception(f"Ollama error: {resp.status_code} - {resp.text[:200]}")
 
 
-async def _openai_chat(client, model, messages, settings, provider_id: str) -> Dict:
+async def _openai_chat(client, model, messages, settings, provider_id: str, max_tokens_limit=None) -> Dict:
     payload = {
         "model": model,
         "messages": messages,
         "temperature": float(settings.temperature),
-        "max_tokens": settings.max_tokens,
+        "max_tokens": int(max_tokens_limit) if max_tokens_limit else settings.max_tokens,
         "top_p": float(settings.top_p),
     }
     

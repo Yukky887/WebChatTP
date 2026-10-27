@@ -11,6 +11,10 @@ class ChatRequest(BaseModel):
     provider: Optional[str] = None
     model: Optional[str] = None
     program: Optional[str] = None
+    # Изображения, прикреплённые к сообщению.
+    # Каждый элемент — data URI вида "data:image/jpeg;base64,..."
+    # (клиент сам сжимает до 1568px по длинной стороне, JPEG q80)
+    attachments: Optional[List[str]] = []
 
 class UsageInfo(BaseModel):
     prompt_tokens: int = 0
