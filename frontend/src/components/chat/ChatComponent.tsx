@@ -96,8 +96,8 @@ export const ChatComponent: React.FC<ChatComponentProps> = ({
     setSelectedProgram(prev => prev === program ? null : program);
   };
 
-  const handleSend = async (text: string) => {
-    await send(text, currentProvider, selectedModel, selectedProgram || undefined);
+  const handleSend = async (text: string, attachments: string[] = []) => {
+    await send(text, currentProvider, selectedModel, selectedProgram || undefined, false, attachments);
     onSessionChange?.();  // Обновить список сессий
   };
 

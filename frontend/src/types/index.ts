@@ -54,6 +54,8 @@ export interface ChatRequest {
   provider?: string;
   model?: string;
   program?: string;
+  /** Изображения=data URI ("data:image/jpeg;base64,...") — vision-режим */
+  attachments?: string[];
 }
 
 export interface ChatResponse {
@@ -183,6 +185,8 @@ export interface Message {
   timestamp?: Date;
   needsProgramSelection?: boolean;  
   program?: string;  
+  /** Прикреплённые изображения (data URI) — только для локальных сообщений */
+  images?: string[];
 }
 
 // ==================== СОСТОЯНИЕ ====================

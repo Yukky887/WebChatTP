@@ -21,11 +21,18 @@ export const useChat = () => {
     model: string,
     program?: string,
     skipUserMessage?: boolean,
+    images?: string[],
   ) => {
-    if (!text.trim() || loading) return;
+    const attachments = images && images.length > 0 ? images : undefined;
+    if (!text.trim() && !attachments) return;
+    if (loading) return;
 
     if (!skipUserMessage) {
-      const userMessage: Message = { role: 'user', content: text };
+      const userMessage: Message = {
+        role: 'user',
+        content: text.trim() || '📎 [изображение]',
+        images: attachments,
+      };
       setMessages(prev => [...prev, userMessage]);
     }
 
@@ -39,6 +46,7 @@ export const useChat = () => {
         model,
         session_id: sessionId || undefined,
         program,
+        attachments,
       });
 
       setSessionId(response.session_id);

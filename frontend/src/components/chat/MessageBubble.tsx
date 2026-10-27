@@ -37,6 +37,30 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           width: 'fit-content',
           wordBreak: 'break-word',
         }}>
+          {/* Прикреплённые изображения (эхо; из истории БД картинки не загружаются) */}
+          {message.images && message.images.length > 0 && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: message.content ? 1 : 0 }}>
+              {message.images.map((src, i) => (
+                <Box
+                  key={i}
+                  component="img"
+                  src={src}
+                  alt="вложение"
+                  onClick={() => window.open(src, '_blank')}
+                  sx={{
+                    width: 120,
+                    height: 90,
+                    objectFit: 'cover',
+                    borderRadius: 1.5,
+                    cursor: 'zoom-in',
+                    display: 'block',
+                    bgcolor: 'white',
+                    border: '1px solid rgba(255,255,255,0.5)',
+                  }}
+                />
+              ))}
+            </Box>
+          )}
           <Typography sx={{ 
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
