@@ -8,7 +8,7 @@ interface ChatInputProps {
   disabled: boolean;
   selectedProgram: string | null;
   onProgramToggle: (program: string) => void;
-  onSend: (text: string, attachments: string[]) => void;
+  onSend: (text: string, attachments: string[], useWeb: boolean) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -21,11 +21,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<string[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [useWeb, setUseWeb] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSend = () => {
     if ((!value.trim() && attachments.length === 0) || loading || disabled) return;
-    onSend(value.trim(), attachments);
+    onSend(value.trim(), attachments, useWeb);
     setValue('');
     setAttachments([]);
     setAttachError(null);
@@ -208,6 +209,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   },
                 }}
               />
+              {!hasImages && (
+                <Chip
+                  label="🌐 Умный поиск"
+                  onClick={() => setUseWeb((w) => !w)}
+                  size="small"
+                  color={useWeb ? 'success' : 'default'}
+                  variant={useWeb ? 'filled' : 'outlined'}
+                  sx={{
+                    cursor: 'pointer',
+                    fontWeight: useWeb ? 600 : 400,
+                    borderRadius: 1.5,
+                    bgcolor: useWeb ? 'success.main' : 'transparent',
+                    color: useWeb ? 'white' : 'text.secondary',
+                    marginLeft: '4px',
+                    '&:hover': {
+                      bgcolor: useWeb ? 'success.dark' : 'rgba(0,0,0,0.04)',
+                    },
+                  }}
+                />
+              )}
             </Box>
 
             {/* Кнопка прикрепления + отправка — справа */}
@@ -266,7 +287,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         >
           {hasImages
             ? '🖼 Изображения уйдут через Gemini Vision (облачно)'
-            : 'Enter — отправить | Shift+Enter — новая строка'}
+            : useWeb
+              ? '🌐 Умный поиск включён — модель дополнительно посмотрит в интернете'
+              : 'Enter — отправить | Shift+Enter — новая строка'}
         </Typography>
       </Box>
     </Box>

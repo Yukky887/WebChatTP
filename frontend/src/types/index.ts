@@ -38,7 +38,7 @@ export interface UsageInfo {
 
 export interface Source {
   index: number;
-  type: 'ticket' | 'documentation';
+  type: 'ticket' | 'documentation' | 'web';
   title: string;
   url?: string;
   score: number;
@@ -56,6 +56,8 @@ export interface ChatRequest {
   program?: string;
   /** Изображения=data URI ("data:image/jpeg;base64,...") — vision-режим */
   attachments?: string[];
+  /** «Умный поиск»: дополнительно искать в интернете (текстовые сообщения) */
+  use_web?: boolean;
 }
 
 export interface ChatResponse {

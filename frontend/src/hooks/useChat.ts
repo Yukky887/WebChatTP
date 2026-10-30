@@ -22,6 +22,7 @@ export const useChat = () => {
     program?: string,
     skipUserMessage?: boolean,
     images?: string[],
+    useWeb?: boolean,
   ) => {
     const attachments = images && images.length > 0 ? images : undefined;
     if (!text.trim() && !attachments) return;
@@ -47,6 +48,7 @@ export const useChat = () => {
         session_id: sessionId || undefined,
         program,
         attachments,
+        use_web: useWeb || undefined,
       });
 
       setSessionId(response.session_id);

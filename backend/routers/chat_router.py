@@ -69,6 +69,7 @@ async def chat(
         program=request.program,
         user_id=user.id if user else None,  # ← Привязка к юзеру
         attachments=attachments,
+        use_web=request.use_web,
         db=db,
     )
     return ChatResponse(**result)

@@ -15,6 +15,9 @@ class ChatRequest(BaseModel):
     # Каждый элемент — data URI вида "data:image/jpeg;base64,..."
     # (клиент сам сжимает до 1568px по длинной стороне, JPEG q80)
     attachments: Optional[List[str]] = []
+    # «Умный поиск»: дополнительно искать информацию в интернете
+    # (работает для текстовых сообщений; для картинок игнорируется)
+    use_web: bool = False
 
 class UsageInfo(BaseModel):
     prompt_tokens: int = 0

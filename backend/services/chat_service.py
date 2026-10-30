@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.search_service import search_all
+from services.web_search import web_search
 from llm_providers import chat_completion
 from db.repositories import ChatRepository
 from db.repositories import ProviderRepository
@@ -63,12 +64,14 @@ async def process_chat(
     program: Optional[str] = None,
     user_id: Optional[int] = None,  # ← ДОБАВЛЕНО
     attachments: Optional[List[str]] = None,
+    use_web: bool = False,
     db: Optional[AsyncSession] = None,
 ) -> Dict:
     """
     Обрабатывает сообщение чата с сохранением в БД.
     `attachments` — data URI изображений; если есть — идёт в vision-режим
     (без выбора программы и без RAG-поиска).
+    `use_web` — «Умный поиск»: добавляет в контекст сниппеты из интернета.
     """
     has_images = bool(attachments)
     chat_repo = ChatRepository(db) if db else None
@@ -153,6 +156,7 @@ async def process_chat(
     tickets: List[Dict] = []
     docs: List[Dict] = []
     context_text = ""
+    web_results: List[Dict] = []
 
     if not has_images:
         print(f"🔍 [{detected_program}] Поиск: {message[:50]}...")
@@ -160,6 +164,14 @@ async def process_chat(
 
         tickets = [r for r in search_results if r.get("type") == "ticket"][:10]
         docs = [r for r in search_results if r.get("type") == "documentation"][:10]
+
+        # «Умный поиск»: дополнительное обращение к интернету
+        if use_web:
+            print(f"🌐 Умный поиск: {message[:50]}...")
+            try:
+                web_results = await web_search(message)
+            except Exception as e:
+                print(f"⚠️ Web search error: {e}")
     
     # ========== КОНТЕКСТ ==========
     context_parts = []
@@ -199,6 +211,27 @@ async def process_chat(
             })
     
     context_text = "\n\n".join(context_parts) if context_parts else "Контекст не найден."
+
+    # «Умный поиск»: блок интернета добавляем в контекст
+    if web_results:
+        context_parts.append("\n### 🌐 Информация из интернета:\n")
+        for i, w in enumerate(web_results):
+            content = (w.get("content", "") or "")[:800]
+            context_parts.append(
+                f"[Web {i+1}] {w.get('title', '')}\n"
+                f"{w.get('url', '')}\n"
+                f"{content}"
+            )
+            sources.append({
+                "index": len(tickets) + len(docs) + i + 1,
+                "type": "web",
+                "title": w.get("title", ""),
+                "url": w.get("url", ""),
+                "score": w.get("score", 0),
+                "content_length": len(content),
+            })
+        context_text = "\n\n".join(context_parts)
+
     program_name = "Parts.Intellect" if detected_program == "intellect" else "Parts.Resource"
     
     # ========== ПРОМПТ ==========
@@ -211,7 +244,8 @@ async def process_chat(
 1. Отвечай только по {program_name}
 2. Используй заявки ТП как приоритет
 3. Документация дополняет
-4. Если информации недостаточно — скажи об этом
+4. Информация из интернета (🌐) — вспомогательная; применяй её, когда внутренней базы недостаточно, и упомяни, что взято из интернета
+5. Если информации недостаточно — скажи об этом
 """
     
     if has_images:
