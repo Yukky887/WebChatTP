@@ -1,4 +1,5 @@
 # backend/routers/chat_router.py
+import os
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -17,6 +18,10 @@ router = APIRouter(prefix="/api", tags=["chat"])
 # Лимиты изображений на одно сообщение
 MAX_ATTACHMENTS = 4
 MAX_ATTACHMENT_URI_LEN = 15_000_000  # base64 JPEG ~13.3 МБ нетто ≈ 10 МБ
+
+# Vision-модель: Google закрыл gemini-2.5-flash-lite для новых ключей (404),
+# поэтому дефолт — gemini-3.5-flash-lite; можно переопределить через VISION_MODEL
+VISION_MODEL = os.getenv("VISION_MODEL", "google/gemini-3.5-flash-lite")
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -40,10 +45,10 @@ async def chat(
         if len(uri) > MAX_ATTACHMENT_URI_LEN:
             raise HTTPException(400, "Изображение слишком большое (лимит ~10 МБ)")
 
-    # С картинками гоним через облачный vision (дешёвый gemini flash-lite)
+    # С картинками гоним через облачный vision
     if has_images:
         provider = "routerai"
-        model_name = "google/gemini-2.5-flash-lite"
+        model_name = VISION_MODEL
 
     if not provider:
         raise HTTPException(400, "Провайдер не выбран")
