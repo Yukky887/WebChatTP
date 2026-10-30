@@ -5,7 +5,7 @@ from sqlalchemy import select, desc
 from uuid import UUID
 
 from db.session import get_db
-from db.models import User, ChatSession, Message
+from db.models import User, ChatSession, Message, MessageSource
 from dependencies.auth import require_auth
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
@@ -16,12 +16,12 @@ async def get_my_sessions(
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    """Список сессий текущего пользователя"""
+    """Список сессий текущего пользователя (последние 100 — покрывает месяц+)"""
     result = await db.execute(
         select(ChatSession)
         .where(ChatSession.user_id == user.id)
         .order_by(desc(ChatSession.updated_at))
-        .limit(50)
+        .limit(100)
     )
     sessions = result.scalars().all()
     
@@ -70,13 +70,32 @@ async def get_session_messages(
         .order_by(Message.created_at)
     )
     messages = result.scalars().all()
-    
+
+    # Источники сообщений (message_sources) — группируем по message_id
+    msg_ids = [m.id for m in messages if m.role == "assistant"]
+    sources_by_message: dict = {}
+    if msg_ids:
+        src_result = await db.execute(
+            select(MessageSource)
+            .where(MessageSource.message_id.in_(msg_ids))
+            .order_by(MessageSource.source_index)
+        )
+        for ms in src_result.scalars():
+            sources_by_message.setdefault(ms.message_id, []).append({
+                "index": ms.source_index or 0,
+                "type": ms.source_type or "unknown",
+                "title": ms.source_title or "",
+                "url": ms.source_url or "",
+                "score": float(ms.qdrant_score) if ms.qdrant_score is not None else 0,
+            })
+
     return [
         {
             "id": m.id,
             "role": m.role,
             "content": m.content,
             "program_id": m.program_id,
+            "sources": sources_by_message.get(m.id, []),
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         for m in messages

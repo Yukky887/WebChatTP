@@ -1,6 +1,6 @@
-import React from 'react';
-import { Box, Paper, Typography, IconButton, Tooltip, Avatar } from '@mui/material';
-import { Person as PersonIcon, Psychology as AIIcon, ContentCopy as CopyIcon } from '@mui/icons-material';
+import React, { useState } from 'react';
+import { Box, Paper, Typography, IconButton, Tooltip, Avatar, Collapse } from '@mui/material';
+import { Person as PersonIcon, Psychology as AIIcon, ContentCopy as CopyIcon, ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import { Message, Source } from '../../types';
 import { SourceChip } from './SourceChip';
 import { MarkdownRenderer } from '../common/MarkdownRenderer';
@@ -120,19 +120,53 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         </Box>
       </Box>
 
-      {/* Источники — под сообщением */}
+      {/* Источники — разворачивающийся список под сообщением */}
       {message.sources && message.sources.length > 0 && (
-        <Box sx={{ 
-          display: 'flex', 
-          flexWrap: 'wrap', 
+        <SourcesList sources={message.sources} />
+      )}
+    </Box>
+  );
+};
+
+/** Разворачивающийся список источников ответа ассистента */
+const SourcesList: React.FC<{ sources: Source[] }> = ({ sources }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Box
+        onClick={() => setOpen((o) => !o)}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
           gap: 0.5,
-          mt: 0.5,
-        }}>
-          {message.sources.map((source: Source) => (
+          cursor: 'pointer',
+          userSelect: 'none',
+          px: 1,
+          py: 0.25,
+          borderRadius: 1.5,
+          '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+        }}
+      >
+        <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+          📎 Источники ({sources.length})
+        </Typography>
+        <ExpandMoreIcon
+          sx={{
+            fontSize: 16,
+            color: 'text.secondary',
+            transition: 'transform 0.2s',
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+          }}
+        />
+      </Box>
+      <Collapse in={open}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, pt: 0.5 }}>
+          {sources.map((source: Source) => (
             <SourceChip key={source.index} source={source} />
           ))}
         </Box>
-      )}
+      </Collapse>
     </Box>
   );
 };

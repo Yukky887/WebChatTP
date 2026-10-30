@@ -14,8 +14,51 @@ import {
 } from '@mui/icons-material';
 import { ChatComponent } from './components/chat/ChatComponent';
 import { useSessions } from './hooks/useSessions';
+import config from './config';
+import { ChatSessionInfo } from './api/sessions';
 
 const SIDEBAR_WIDTH = 280;
+
+/** Сегменты истории чатов: Сегодня / Вчера / На этой неделе / В этом месяце / Ранее */
+const DATE_SECTIONS: { label: string; within: (d: Date, now: Date) => boolean }[] = [
+  { label: 'Сегодня', within: (d, now) => sameDay(d, now) },
+  { label: 'Вчера', within: (d, now) => sameDay(d, addDays(now, -1)) },
+  { label: 'На этой неделе', within: (d, now) => d >= startOfWeek(now) && !sameDay(d, now) && !sameDay(d, addDays(now, -1)) },
+  { label: 'В этом месяце', within: (d, now) => d >= startOfMonth(now) && d < startOfWeek(now) },
+  { label: 'Ранее', within: (d, now) => d < startOfMonth(now) },
+];
+
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getTime() + n * 86400000);
+}
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function startOfWeek(now: Date): Date {
+  const s = startOfDay(now);
+  // Понедельник — начало недели
+  const day = (s.getDay() + 6) % 7;
+  return addDays(s, -day);
+}
+function startOfMonth(now: Date): Date {
+  return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+function groupSessionsByDate(sessions: ChatSessionInfo[]): { label: string; items: ChatSessionInfo[] }[] {
+  const now = startOfDay(new Date());
+  const buckets: Record<string, ChatSessionInfo[]> = {};
+  for (const s of sessions) {
+    const d = new Date(s.updated_at || s.created_at);
+    const section = DATE_SECTIONS.find((sec) => sec.within(d, now)) || DATE_SECTIONS[DATE_SECTIONS.length - 1];
+    (buckets[section.label] ||= []).push(s);
+  }
+  return DATE_SECTIONS
+    .map((sec) => ({ label: sec.label, items: buckets[sec.label] || [] }))
+    .filter((sec) => sec.items.length > 0);
+}
 
 const MainPage: React.FC = () => {
   const navigate = useNavigate();
@@ -99,46 +142,56 @@ const MainPage: React.FC = () => {
                 </Typography>
                 
                 <List dense disablePadding>
-                  {sessions.map((session) => (
-                    <ListItem
-                      key={session.id}
-                      onClick={() => handleSessionClick(session.id)}
-                      sx={{
-                        cursor: 'pointer',
-                        borderRadius: 1,
-                        mx: 1,
-                        mb: 0.5,
-                        bgcolor: currentSessionId === session.id ? '#e3f2fd' : 'transparent',
-                        '&:hover': { bgcolor: '#e0e0e0' },
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 32 }}>
-                        <ChatIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          session.title?.trim()
-                            ? session.title
-                            : session.selected_program === 'intellect'
-                              ? '🧠 Intellect'
-                              : session.selected_program === 'resource'
-                                ? '🔧 Resource'
-                                : '💬 Чат'
-                        }
-                        secondary={new Date(
-                          session.updated_at || session.created_at
-                        ).toLocaleDateString('ru-RU', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                        slotProps={{
-                          primary: { variant: 'body2', noWrap: true },
-                          secondary: { variant: 'caption' },
-                        }}
-                      />
-                    </ListItem>
+                  {groupSessionsByDate(sessions).map((section) => (
+                    <React.Fragment key={section.label}>
+                      <Typography
+                        variant="caption"
+                        sx={{ px: 2, pt: 1, pb: 0.5, display: 'block', fontWeight: 600, color: 'text.secondary' }}
+                      >
+                        {section.label}
+                      </Typography>
+                      {section.items.map((session) => (
+                        <ListItem
+                          key={session.id}
+                          onClick={() => handleSessionClick(session.id)}
+                          sx={{
+                            cursor: 'pointer',
+                            borderRadius: 1,
+                            mx: 1,
+                            mb: 0.5,
+                            bgcolor: currentSessionId === session.id ? '#e3f2fd' : 'transparent',
+                            '&:hover': { bgcolor: '#e0e0e0' },
+                          }}
+                        >
+                          <ListItemIcon sx={{ minWidth: 32 }}>
+                            <ChatIcon fontSize="small" />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={
+                              session.title?.trim()
+                                ? session.title
+                                : session.selected_program === 'intellect'
+                                  ? '🧠 Intellect'
+                                  : session.selected_program === 'resource'
+                                    ? '🔧 Resource'
+                                    : '💬 Чат'
+                            }
+                            secondary={new Date(
+                              session.updated_at || session.created_at
+                            ).toLocaleDateString('ru-RU', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                            slotProps={{
+                              primary: { variant: 'body2', noWrap: true },
+                              secondary: { variant: 'caption' },
+                            }}
+                          />
+                        </ListItem>
+                      ))}
+                    </React.Fragment>
                   ))}
                 </List>
               </>
@@ -166,7 +219,7 @@ const MainPage: React.FC = () => {
           {/* Версия */}
           <Box sx={{ mt: 'auto', p: 2 }}>
             <Typography variant="caption" color="text.secondary">
-              Версия 1.0.0
+              Версия {config.appVersion}
             </Typography>
           </Box>
         </Box>

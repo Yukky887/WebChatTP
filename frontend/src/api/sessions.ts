@@ -1,4 +1,5 @@
 import client from './client';
+import { Source } from '../types';
 
 export interface ChatSessionInfo {
   id: string;
@@ -15,6 +16,7 @@ export interface SessionMessage {
   role: 'user' | 'assistant';
   content: string;
   program_id: string | null;
+  sources?: Source[];
   created_at: string;
 }
 

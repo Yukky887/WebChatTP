@@ -58,7 +58,7 @@ export const ChatComponent: React.FC<ChatComponentProps> = ({
       const formattedMessages = loadedMessages.map(m => ({
         role: m.role,
         content: m.content,
-        sources: [],
+        sources: m.sources || [],
       }));
       
       setMessages(formattedMessages);

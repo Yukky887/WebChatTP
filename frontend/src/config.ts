@@ -1,8 +1,14 @@
 const API_BASE_URL = 
   process.env.REACT_APP_API_URL || '/api';
 
+// Версия приложения — меняется руками при выпуске значимых фич (semver):
+// 1.1.0 — история чатов с авто-тайтлами, фикс истории для leha
+// 1.2.0 — vision (картинки в чате), источники-в-пузыре, группировка истории
+export const APP_VERSION = '1.2.0';
+
 export const config = {
   apiBaseUrl: API_BASE_URL,
+  appVersion: APP_VERSION,
   
   endpoints: {
     // Health
