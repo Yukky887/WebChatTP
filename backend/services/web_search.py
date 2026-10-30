@@ -1,10 +1,12 @@
 # backend/services/web_search.py
 """Веб-поиск для «Умного поиска» в чате.
 
-Приоритет провайдеров:
-1. Tavily API (нужно задать TAVILY_API_KEY — бесплатный тариф ~1000 запросов/мес,
+Приоритет провайдеров (первый с заданным ключом побеждает):
+1. Tavily API (TAVILY_API_KEY, бесплатные ~1000 запросов/мес на tavily.com,
    выдаёт готовые текстовые сниппеты под LLM).
-2. DuckDuckGo HTML (без ключа; неофициальная вставка, работает "как есть").
+2. Serper.dev (SERPER_API_KEY, Google-поиск, 2500 запросов бесплатно при регистрации).
+3. DuckDuckGo HTML (без ключа; часто ловит бот-детекцию — тогда веб-источников просто не будет,
+   ответ модели не ломается).
 
 Единый формат результата — как у внутренних источников, только type="web":
 [{"type": "web", "title": str, "url": str, "score": float, "content": str}]
@@ -14,7 +16,8 @@ from urllib.parse import unquote
 
 import httpx
 
-from config import TAVILY_API_KEY, WEB_SEARCH_RESULTS, WEB_SEARCH_TIMEOUT
+from config import (TAVILY_API_KEY, SERPER_API_KEY, WEB_SEARCH_RESULTS,
+                    WEB_SEARCH_TIMEOUT)
 
 _HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -26,16 +29,16 @@ _HEADERS = {
 async def web_search(query: str, max_results: int = None) -> list:
     """Возвращает список веб-источников по запросу (пустой список — нечего добавить)."""
     n = max_results or WEB_SEARCH_RESULTS
-    if TAVILY_API_KEY:
+    for fn in (_tavily, _serper, _duckduckgo):
+        if fn is _tavily and not TAVILY_API_KEY:
+            continue
+        if fn is _serper and not SERPER_API_KEY:
+            continue
         try:
-            return await _tavily(query, n)
+            return await fn(query, n)
         except Exception as e:
-            print(f"⚠️ Tavily недоступен ({e}); пробуем DuckDuckGo")
-    try:
-        return await _duckduckgo(query, n)
-    except Exception as e:
-        print(f"⚠️ DuckDuckGo недоступен: {e}")
-        return []
+            print(f"⚠️ {fn.__name__} недоступен: {e}")
+    return []
 
 
 async def _tavily(query: str, max_results: int) -> list:
@@ -57,6 +60,25 @@ async def _tavily(query: str, max_results: int) -> list:
             "url": item.get("url") or "",
             "score": float(item.get("score") or 0),
             "content": (item.get("content") or "")[:900],
+        })
+    return out
+
+
+async def _serper(query: str, max_results: int) -> list:
+    async with httpx.AsyncClient(timeout=WEB_SEARCH_TIMEOUT) as c:
+        r = await c.post("https://google.serper.dev/search",
+                         headers={"X-API-KEY": SERPER_API_KEY},
+                         json={"q": query, "num": max_results, "hl": "ru"})
+        r.raise_for_status()
+        data = r.json()
+    out = []
+    for item in data.get("organic", [])[:max_results]:
+        out.append({
+            "type": "web",
+            "title": (item.get("title") or "")[:200],
+            "url": item.get("link") or "",
+            "score": 0,
+            "content": (item.get("snippet") or "")[:900],
         })
     return out
 

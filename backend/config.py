@@ -70,6 +70,7 @@ ADMIN_PASSWORD = get_env("ADMIN_PASSWORD", "admin123")
 # Если задан TAVILY_API_KEY — используется Tavily (бесплатно ~1000 запросов/мес,
 # ключ с tavily.com). Иначе — DuckDuckGo (без ключа).
 TAVILY_API_KEY = get_env("TAVILY_API_KEY", "")
+SERPER_API_KEY = get_env("SERPER_API_KEY", "")
 WEB_SEARCH_RESULTS = int(get_env("WEB_SEARCH_RESULTS", "5"))
 WEB_SEARCH_TIMEOUT = float(get_env("WEB_SEARCH_TIMEOUT", "12"))
 
