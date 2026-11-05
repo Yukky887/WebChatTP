@@ -9,7 +9,7 @@ from services.chat_service import process_chat
 from services.state import state
 from db.session import get_db
 from db.repositories import ProviderRepository
-from db.models import User
+from db.models import User, ApiToken
 from dependencies.auth import get_current_user, get_api_token
 
 
