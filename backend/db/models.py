@@ -139,11 +139,34 @@ class ProgramKeyword(Base):
     program = relationship('Program', back_populates='keywords')
 
 
+class ApiToken(Base):
+    """API-токен для внешних интеграций (отделы ТП, продажи и т.д.).
+
+    В БД хранится только sha256-хэш — сам токен показывается один раз
+    при создании (в ответе POST /api/admin/tokens).
+    `scopes` — список доступных коллекций поиска:
+    ["tickets", "parts_intellect", "parts_resource"].
+    """
+    __tablename__ = 'api_tokens'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    prefix = Column(String(16))            # первые символы, для показа в списке
+    scopes = Column(JSONB, default=list)
+    is_active = Column(Boolean, default=True)
+    last_used_at = Column(DateTime)
+    created_by = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ChatSession(Base):
     __tablename__ = 'chat_sessions'
     
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=text('gen_random_uuid()'))
     user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), index=True)
+    api_token_id = Column(Integer, ForeignKey('api_tokens.id', ondelete='SET NULL'), index=True)
     provider_id = Column(String(50), ForeignKey('llm_providers.id'))
     model_id = Column(Integer, ForeignKey('llm_models.id'))
     selected_program = Column(String(50), ForeignKey('programs.id'))

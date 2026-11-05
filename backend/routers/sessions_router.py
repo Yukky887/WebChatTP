@@ -3,28 +3,42 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from uuid import UUID
+from typing import Optional, Tuple
 
 from db.session import get_db
-from db.models import User, ChatSession, Message, MessageSource
-from dependencies.auth import require_auth
+from db.models import User, ApiToken, ChatSession, Message, MessageSource
+from dependencies.auth import get_current_user, get_api_token
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
+async def require_principal(
+    user: Optional[User] = Depends(get_current_user),
+    api_token: Optional[ApiToken] = Depends(get_api_token),
+) -> Tuple[Optional[User], Optional[ApiToken]]:
+    """Историю видит юзер (свои сессии) или API-токен (свои сессии)."""
+    if user is not None:
+        return user, None
+    if api_token is not None:
+        return None, api_token
+    raise HTTPException(401, "Требуется авторизация")
+
+
 @router.get("")
 async def get_my_sessions(
-    user: User = Depends(require_auth),
+    principal: Tuple = Depends(require_principal),
     db: AsyncSession = Depends(get_db),
 ):
-    """Список сессий текущего пользователя (последние 100 — покрывает месяц+)"""
-    result = await db.execute(
-        select(ChatSession)
-        .where(ChatSession.user_id == user.id)
-        .order_by(desc(ChatSession.updated_at))
-        .limit(100)
-    )
+    """Список сессий текущего пользователя или API-токена (последние 100)"""
+    user, api_token = principal
+    query = select(ChatSession).order_by(desc(ChatSession.updated_at)).limit(100)
+    if user is not None:
+        query = query.where(ChatSession.user_id == user.id)
+    else:
+        query = query.where(ChatSession.api_token_id == api_token.id, ChatSession.user_id.is_(None))
+    result = await db.execute(query)
     sessions = result.scalars().all()
-    
+
     return [
         {
             "id": str(s.id),
@@ -42,26 +56,25 @@ async def get_my_sessions(
 @router.get("/{session_id}/messages")
 async def get_session_messages(
     session_id: str,
-    user: User = Depends(require_auth),
+    principal: Tuple = Depends(require_principal),
     db: AsyncSession = Depends(get_db),
 ):
     """Сообщения конкретной сессии"""
+    user, api_token = principal
     try:
         sid = UUID(session_id)
     except ValueError:
         raise HTTPException(400, "Неверный ID сессии")
-    
-    # Проверяем что сессия принадлежит пользователю
-    result = await db.execute(
-        select(ChatSession).where(ChatSession.id == sid)
-    )
-    session = result.scalar_one_or_none()
-    
+
+    session = (await db.execute(select(ChatSession).where(ChatSession.id == sid))).scalar_one_or_none()
     if not session:
         raise HTTPException(404, "Сессия не найдена")
-    
-    if session.user_id != user.id:
-        raise HTTPException(403, "Нет доступа")
+    if user is not None:
+        if session.user_id != user.id:
+            raise HTTPException(403, "Нет доступа")
+    else:
+        if session.api_token_id != api_token.id or session.user_id is not None:
+            raise HTTPException(403, "Нет доступа")
     
     # Получаем сообщения
     result = await db.execute(
@@ -105,25 +118,25 @@ async def get_session_messages(
 @router.delete("/{session_id}")
 async def delete_session(
     session_id: str,
-    user: User = Depends(require_auth),
+    principal: Tuple = Depends(require_principal),
     db: AsyncSession = Depends(get_db),
 ):
     """Удаляет сессию"""
+    user, api_token = principal
     try:
         sid = UUID(session_id)
     except ValueError:
         raise HTTPException(400, "Неверный ID сессии")
-    
-    result = await db.execute(
-        select(ChatSession).where(ChatSession.id == sid)
-    )
-    session = result.scalar_one_or_none()
-    
+
+    session = (await db.execute(select(ChatSession).where(ChatSession.id == sid))).scalar_one_or_none()
     if not session:
         raise HTTPException(404, "Сессия не найдена")
-    
-    if session.user_id != user.id:
-        raise HTTPException(403, "Нет доступа")
+    if user is not None:
+        if session.user_id != user.id:
+            raise HTTPException(403, "Нет доступа")
+    else:
+        if session.api_token_id != api_token.id or session.user_id is not None:
+            raise HTTPException(403, "Нет доступа")
     
     await db.delete(session)
     await db.commit()

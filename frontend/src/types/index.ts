@@ -176,6 +176,41 @@ export interface LoginResponse {
 
 // ==================== ЧАТ ====================
 
+// ==================== API-ТОКЕНЫ ====================
+
+export const API_SCOPE_LABELS: Record<string, string> = {
+  tickets: 'Заявки ТП',
+  parts_intellect: 'Документация Parts.Intellect',
+  parts_resource: 'Документация Parts.Resource',
+};
+
+export interface ApiToken {
+  id: number;
+  name: string;
+  /** Первые символы после префикса wcb_ — для идентификации в списке */
+  prefix: string;
+  scopes: string[];
+  is_active: boolean;
+  last_used_at: string | null;
+  created_at: string | null;
+}
+
+export interface ApiTokenCreatePayload {
+  name: string;
+  scopes: string[];
+  is_active?: boolean;
+}
+
+/** Созданный токен — сырое значение приходит ОДИН РАЗ */
+export interface ApiTokenCreated extends ApiToken {
+  token: string;
+}
+
+export interface ApiTokenListResponse {
+  tokens: ApiToken[];
+  allowed_scopes: string[];
+}
+
 export interface Message {
   role: 'user' | 'assistant';
   content: string;

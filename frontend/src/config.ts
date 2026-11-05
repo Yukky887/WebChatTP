@@ -4,8 +4,9 @@ const API_BASE_URL =
 // Версия приложения — меняется руками при выпуске значимых фич (semver):
 // 1.1.0 — история чатов с авто-тайтлами, фикс истории для leha
 // 1.2.0 — vision (картинки в чате), источники-в-пузыре, группировка истории
+// 1.4.0 — API-токены в админке (скоупы коллекций) + доступ по API
 // 1.3.0 — «Умный поиск»: веб-режим в чате (Tavily, иначе DuckDuckGo)
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 
 export const config = {
   apiBaseUrl: API_BASE_URL,

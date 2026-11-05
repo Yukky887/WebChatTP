@@ -18,11 +18,13 @@ class ChatRepository:
         provider_id: Optional[str] = None,
         model_id: Optional[int] = None,
         selected_program: Optional[str] = None,
+        api_token_id: Optional[int] = None,
     ) -> ChatSession:
         """Создаёт новую сессию чата"""
         session = ChatSession(
             id=session_id,
             user_id=user_id,
+            api_token_id=api_token_id,
             provider_id=provider_id,
             model_id=model_id,
             selected_program=selected_program,
@@ -49,19 +51,28 @@ class ChatRepository:
         Возвращает None, если сессия с таким id — чужая: тогда чат продолжится
         в новой сессии, а история другого пользователя не доступна.
 
-        Сессии без владельца (гостевые, а также созданные при истёкшем токене,
-        когда передавался user_id=None) привязываются к текущему пользователю —
-        так восстановление истории происходит автоматически.
+        Владение: сессии пользователя — по user_id (api_token_id=None),
+        сессии API-токена — по api_token_id (user_id=None). Чуж getS не
+        подхватывается ни юзером, ни другим токеном. Сессии без владельца
+        (гостевые) приравниваются к обычным анонимным и могут получать
+        user_id при перерегистрации юзера (как раньше).
         """
         user_id = kwargs.get("user_id")
+        api_token_id = kwargs.get("api_token_id")
 
         if session_id:
             session = await self.get_session(session_id)
             if session is not None:
-                owner = session.user_id
-                if owner is not None and (user_id is None or owner != user_id):
+                owner_user = session.user_id
+                owner_token = session.api_token_id
+                # Сессия конкретного юзера недоступна никому другому
+                if owner_user is not None and (user_id is None or owner_user != user_id):
                     return None
-                if owner is None and user_id is not None:
+                # Сессия конкретного токена — только этому токену
+                if owner_token is not None and owner_token != api_token_id:
+                    return None
+                # Гостевые (созданные без владельца) может забрать во владение юзер
+                if owner_user is None and owner_token is None and user_id is not None:
                     session.user_id = user_id
                     await self.db.commit()
                 return session

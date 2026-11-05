@@ -3,7 +3,8 @@ import {
   AdminSettingsResponse, 
   LLMSettings, 
   LoginResponse, 
-  SearchSettings
+  SearchSettings,
+  ApiToken, ApiTokenCreatePayload, ApiTokenCreated, ApiTokenListResponse,
 } from '../types';
 import config from '../config';
 
@@ -58,5 +59,26 @@ export const adminApi = {
     await client.post('/admin/search-settings', null, {
       params: { use_tickets: useTickets, use_documentation: useDocumentation },
     });
+  },
+
+  // ==================== API-токены ====================
+
+  async listApiTokens(): Promise<ApiTokenListResponse> {
+    const response = await client.get('/admin/tokens');
+    return response.data;
+  },
+
+  async createApiToken(payload: ApiTokenCreatePayload): Promise<ApiTokenCreated> {
+    const response = await client.post('/admin/tokens', payload);
+    return response.data;
+  },
+
+  async toggleApiToken(id: number, isActive: boolean): Promise<ApiToken> {
+    const response = await client.post(`/admin/tokens/${id}/toggle`, { is_active: isActive });
+    return response.data;
+  },
+
+  async deleteApiToken(id: number): Promise<void> {
+    await client.delete(`/admin/tokens/${id}`);
   },
 };

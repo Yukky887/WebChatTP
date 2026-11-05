@@ -10,7 +10,7 @@ from services.state import state
 from db.session import get_db
 from db.repositories import ProviderRepository
 from db.models import User
-from dependencies.auth import get_current_user
+from dependencies.auth import get_current_user, get_api_token
 
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -27,9 +27,14 @@ VISION_MODEL = os.getenv("VISION_MODEL", "google/gemini-3.5-flash-lite")
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
-    user: Optional[User] = Depends(get_current_user),  # ← Опционально
+    user: Optional[User] = Depends(get_current_user),
+    api_token: Optional[ApiToken] = Depends(get_api_token),
     db: AsyncSession = Depends(get_db),
 ):
+    # Принципал: пользовательский JWT > API-токен > гость (аноним, как раньше)
+    if user is not None:
+        api_token = None
+
     provider = request.provider or state.current_provider
     model_name = request.model or state.current_model
 
@@ -70,6 +75,8 @@ async def chat(
         user_id=user.id if user else None,  # ← Привязка к юзеру
         attachments=attachments,
         use_web=request.use_web,
+        allowed_collections=api_token.scopes if api_token else None,
+        api_token_id=api_token.id if api_token else None,
         db=db,
     )
     return ChatResponse(**result)

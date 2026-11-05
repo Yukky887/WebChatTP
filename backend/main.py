@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import (
-    chat_router, search_router, health_router, admin_router, provider_router, provider_router, auth_router, sessions_router
+    chat_router, search_router, health_router, admin_router, provider_router,
+    auth_router, sessions_router, tokens_router
 )
 from services.model_service import refresh_all_models
 from db.session import AsyncSessionLocal
@@ -47,6 +48,7 @@ app.include_router(admin_router.router)
 app.include_router(provider_router.router)
 app.include_router(auth_router.router)
 app.include_router(sessions_router.router)
+app.include_router(tokens_router.router)
 
 if __name__ == "__main__":
     import uvicorn

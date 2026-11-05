@@ -14,6 +14,7 @@ import { LLMSettingsPanel } from './components/admin/LLMSettingsPanel';
 import { ProvidersPanel } from './components/admin/ProvidersPanel';
 import { ModelsPanel } from './components/admin/ModelsPanel';
 import { SearchSettingsPanel } from './components/admin/SearchSettingsPanel';
+import { ApiTokensPanel } from './components/admin/ApiTokensPanel';
 import { adminApi } from './api/admin';
 
 const AdminPage: React.FC = () => {
@@ -182,6 +183,8 @@ const AdminPage: React.FC = () => {
               onToggleTickets={handleToggleTickets}
               onToggleDocumentation={handleToggleDocumentation}
             />
+
+            <ApiTokensPanel />
 
             <ProvidersPanel
               providers={settings.providers}

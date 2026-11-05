@@ -13,11 +13,14 @@ async def search_all(
     query: str,
     program: Optional[str] = None,
     db: Optional[AsyncSession] = None,
+    allowed_collections: Optional[List[str]] = None,
 ) -> List[Dict]:
     """
     Гибридный поиск.
-    
+
     Настройки (use_tickets, use_documentation) читаются из БД если передана сессия.
+    `allowed_collections` — ограничение скоупами (для API-токенов):
+    список из "tickets" / "parts_intellect" / "parts_resource"; None — ограничений нет.
     """
     results = []
     
@@ -51,6 +54,12 @@ async def search_all(
         else:
             collections_to_search["parts_intellect"] = QDRANT_COLLECTIONS.get("parts_intellect")
             collections_to_search["parts_resource"] = QDRANT_COLLECTIONS.get("parts_resource")
+
+    # Скоупы API-токена: оставляем только разрешённые коллекции
+    if allowed_collections is not None:
+        collections_to_search = {
+            k: v for k, v in collections_to_search.items() if k in allowed_collections
+        }
     
     print(f"🔍 Коллекции: {list(collections_to_search.keys())}")
     

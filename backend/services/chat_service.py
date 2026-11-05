@@ -65,6 +65,8 @@ async def process_chat(
     user_id: Optional[int] = None,  # ← ДОБАВЛЕНО
     attachments: Optional[List[str]] = None,
     use_web: bool = False,
+    allowed_collections: Optional[List[str]] = None,
+    api_token_id: Optional[int] = None,
     db: Optional[AsyncSession] = None,
 ) -> Dict:
     """
@@ -72,6 +74,7 @@ async def process_chat(
     `attachments` — data URI изображений; если есть — идёт в vision-режим
     (без выбора программы и без RAG-поиска).
     `use_web` — «Умный поиск»: добавляет в контекст сниппеты из интернета.
+    `allowed_collections` — скоупы API-токена (ограничение поиска по коллекциям).
     """
     has_images = bool(attachments)
     chat_repo = ChatRepository(db) if db else None
@@ -91,11 +94,13 @@ async def process_chat(
             session_id=parsed_session_id,
             user_id=user_id,
             provider_id=provider,
+            api_token_id=api_token_id,
         )
         if db_session is None:
-            # Сессия принадлежит другому пользователю — начинаем новую,
+            # Сессия принадлежит другому пользователю/токену — начинаем новую,
             # чтобы не писать сообщения в чужую историю
-            db_session = await chat_repo.create_session(user_id=user_id, provider_id=provider)
+            db_session = await chat_repo.create_session(
+                user_id=user_id, provider_id=provider, api_token_id=api_token_id)
         session_id = str(db_session.id)
     
     if not session_id:
@@ -160,7 +165,9 @@ async def process_chat(
 
     if not has_images:
         print(f"🔍 [{detected_program}] Поиск: {message[:50]}...")
-        search_results = await search_all(message, program=detected_program, db=db)
+        search_results = await search_all(
+            message, program=detected_program, db=db,
+            allowed_collections=allowed_collections)
 
         tickets = [r for r in search_results if r.get("type") == "ticket"][:10]
         docs = [r for r in search_results if r.get("type") == "documentation"][:10]
