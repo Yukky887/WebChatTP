@@ -7,7 +7,7 @@ from db.repositories import ProviderRepository
 from services.model_service import refresh_all_models, get_providers_with_models
 from services.state import state
 
-router = APIRouter(prefix="/api", tags=["providers"])
+router = APIRouter(prefix="/api", tags=["Клиент · провайдеры"])
 
 
 @router.get("/providers")

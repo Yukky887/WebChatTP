@@ -14,7 +14,7 @@ from db.session import get_db
 from db.models import ApiToken
 from dependencies.auth import get_api_token
 
-router = APIRouter(prefix="/api", tags=["search"])
+router = APIRouter(prefix="/api", tags=["Клиент · поиск"])
 
 
 @router.post("/search")

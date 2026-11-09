@@ -12,7 +12,7 @@ from services.auth_service import (
     user_to_dict, create_access_token, create_refresh_token, decode_token,
 )
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/api/auth", tags=["Клиент · авторизация"])
 
 
 @router.post("/register", response_model=TokenResponse)

@@ -17,7 +17,7 @@ from db.repositories import ApiTokenRepository
 from dependencies.auth import require_role, API_TOKEN_PREFIX, hash_api_token
 import secrets
 
-router = APIRouter(prefix="/api/admin/tokens", tags=["api-tokens"])
+router = APIRouter(prefix="/api/admin/tokens", tags=["Админ · API-токены"])
 
 # Разрешённые скоупы = ключи QDRANT_COLLECTIONS
 ALLOWED_SCOPES = list(QDRANT_COLLECTIONS.keys())

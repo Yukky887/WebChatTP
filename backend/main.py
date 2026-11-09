@@ -42,7 +42,7 @@ app = FastAPI(
         "получить через `POST /api/auth/login`);\n"
         "— внешние интеграции: API-токен с скоупами (`X-API-Key: wcb_...`, "
         "см. `docs/api-tokens.md`) — для chat/search/sessions.\n\n"
-        "Интерактивный Swagger: `/docs`, альтернатива — `/redoc`, JSON-спека — `/openapi.json`."
+        "Интерактивный Swagger: `/docs` (разделы: сначала Клиент, затем Админ), JSON-спека — `/openapi.json`."
     ),
     lifespan=lifespan,
 )
@@ -77,6 +77,7 @@ def _custom_openapi():
         description=app.description or None,
         version=app.version,
         routes=app.routes,
+        tags=_OPENAPI_TAGS,
     )
     schema.setdefault("components", {})["securitySchemes"] = {
         "BearerJWT": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT",
@@ -106,6 +107,27 @@ def _custom_openapi():
 
 
 app.openapi = _custom_openapi
+
+# Порядок и описания групп в Swagger UI: клиентские разделы, затем админка.
+_OPENAPI_TAGS = [
+    {"name": "Клиент · чат",
+     "description": "Вопрос-ответ по базе знаний. Принимает JWT (веб-клиент), `X-API-Key: wcb_...` (API-токен) или работает как гость."},
+    {"name": "Клиент · поиск",
+     "description": "Семантический поиск без LLM — только по скоупам API-токена (`X-API-Key: wcb_...`)."},
+    {"name": "Клиент · история",
+     "description": "История чатов: JWT — свои сессии, `X-API-Key: wcb_...` — сессии API-токена. Изоляция сессий полная."},
+    {"name": "Клиент · провайдеры",
+     "description": "Доступные LLM-провайдеры и модели (GET — всем). Выбор модели (POST) — из админ-панели."},
+    {"name": "Клиент · авторизация",
+     "description": "Регистрация/логин/refresh веб-клиента, выдача и обновление JWT."},
+    {"name": "Админ · настройки",
+     "description": "🔒 Требуется JWT с ролью `admin`. Настройки приложения, провайдеров, поиска и блокировки моделей."},
+    {"name": "Админ · API-токены",
+     "description": "🔒 Требуется JWT с ролью `admin`. Выдача/вкл-выкл/удаление API-токенов интеграций (`wcb_...`). "
+                    "Значение токена возвращается только при создании; в БД хранится sha256-хэш. Подробнее — `docs/api-tokens.md`."},
+    {"name": "Система · health",
+     "description": "Статус сервисов: weaviate, qdrant, выбранные модели и провайдеры. Без авторизации."},
+]
 
 app.add_middleware(
     CORSMiddleware,

@@ -9,7 +9,7 @@ from db.session import get_db
 from db.models import User, ApiToken, ChatSession, Message, MessageSource
 from dependencies.auth import get_current_user, get_api_token
 
-router = APIRouter(prefix="/api/sessions", tags=["sessions"])
+router = APIRouter(prefix="/api/sessions", tags=["Клиент · история"])
 
 
 async def require_principal(

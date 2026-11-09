@@ -10,7 +10,7 @@ from db.repositories import ProviderRepository
 from services.model_service import refresh_all_models, _models_cache
 from services.state import state
 
-router = APIRouter(prefix="/api", tags=["health"])
+router = APIRouter(prefix="/api", tags=["Система · health"])
 
 
 @router.get("/health")

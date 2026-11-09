@@ -16,7 +16,7 @@ from services.state import state
 from dependencies.auth import require_role
 
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["Админ · настройки"])
 
 
 # ==================== НАСТРОЙКИ LLM ====================

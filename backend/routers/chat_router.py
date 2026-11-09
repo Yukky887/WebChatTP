@@ -13,7 +13,7 @@ from db.models import User, ApiToken
 from dependencies.auth import get_current_user, get_api_token
 
 
-router = APIRouter(prefix="/api", tags=["chat"])
+router = APIRouter(prefix="/api", tags=["Клиент · чат"])
 
 # Лимиты изображений на одно сообщение
 MAX_ATTACHMENTS = 4
