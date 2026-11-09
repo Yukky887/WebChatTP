@@ -30,5 +30,6 @@ async def search(
         "results": results,
         "total": len(results),
         "tickets_count": sum(1 for r in results if r.get("type") == "ticket"),
-        "docs_count": sum(1 for r in results if r.get("type") == "documentation")
+        "docs_count": sum(1 for r in results if r.get("type") == "documentation"),
+        "bitrix_count": sum(1 for r in results if r.get("type") == "bitrix")
     }

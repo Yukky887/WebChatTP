@@ -44,13 +44,16 @@ async def update_llm_settings(
 
 async def get_context_settings(db: AsyncSession) -> Dict:
     """Настройки контекста"""
+    from config import BITRIX_COLLECTIONS
     repo = SettingsRepository(db)
     s = await repo.get_context_settings()
+    saved = s.bitrix_scopes or {}
     return {
         "use_tickets": s.use_tickets,
         "use_documentation": s.use_documentation,
         "tickets_limit": s.tickets_limit,
         "docs_limit": s.docs_limit,
+        "bitrix_scopes": {k: bool(saved.get(k, False)) for k in BITRIX_COLLECTIONS},
     }
 
 
@@ -58,11 +61,13 @@ async def update_context_settings(
     db: AsyncSession,
     use_tickets: Optional[bool] = None,
     use_documentation: Optional[bool] = None,
+    bitrix_scopes: Optional[Dict] = None,
 ) -> Dict:
     """Обновляет настройки контекста"""
     repo = SettingsRepository(db)
     await repo.update_context_settings(
         use_tickets=use_tickets,
         use_documentation=use_documentation,
+        bitrix_scopes=bitrix_scopes,
     )
     return await get_context_settings(db)

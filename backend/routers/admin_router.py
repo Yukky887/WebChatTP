@@ -1,7 +1,7 @@
 # backend/routers/admin_router.py
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from models import LLMSettings as LLMSettingsSchema, BlockedModelsUpdate
 from services.settings_service import (
@@ -114,15 +114,18 @@ async def get_search_settings(
 
 @router.post("/search-settings")
 async def update_search_settings_endpoint(
-    use_tickets: bool,
-    use_documentation: bool,
+    use_tickets: Optional[bool] = None,
+    use_documentation: Optional[bool] = None,
+    bitrix_scopes: Optional[Dict[str, bool]] = None,
     user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    """use_tickets/use_documentation — query-параметры; bitrix_scopes — JSON-тело."""
     result = await update_context_settings(
         db,
         use_tickets=use_tickets,
         use_documentation=use_documentation,
+        bitrix_scopes=bitrix_scopes,
     )
     return result
 

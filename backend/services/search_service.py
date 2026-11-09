@@ -18,17 +18,20 @@ async def search_all(
     """
     Гибридный поиск.
 
-    Настройки (use_tickets, use_documentation) читаются из БД если передана сессия.
+    Настройки (use_tickets, use_documentation, bitrix_scopes) читаются из БД если передана сессия.
     `allowed_collections` — ограничение скоупами (для API-токенов):
     список из "tickets" / "parts_intellect" / "parts_resource" / "bitrix_*"; None —
-    ограничений нет. BitInfo_* (дампы Bitrix24) ищутся ТОЛЬКО если разрешены
-    явными скоупами токена — веб-клиент и гость их никогда не видят.
+    ограничений нет. BitInfo_* (дампы Bitrix24) ищутся:
+    — для API-токена: только по скоупам токена (bitrix_* в allowed_collections);
+    — для веб-клиента/гостя: только если тумблеры включены в админке
+      («Источники контекста» → Bitrix24); по умолчанию выключены.
     """
     results = []
     
     # Получаем настройки контекста из БД
     use_tickets = True
     use_documentation = True
+    web_bitrix: Dict[str, bool] = {}
     
     if db:
         try:
@@ -36,6 +39,8 @@ async def search_all(
             ctx = await settings_repo.get_context_settings()
             use_tickets = ctx.use_tickets
             use_documentation = ctx.use_documentation
+            saved = getattr(ctx, "bitrix_scopes", None) or {}
+            web_bitrix = {k: bool(v) for k, v in saved.items() if v}
         except Exception as e:
             print(f"⚠️ Не удалось получить настройки контекста: {e}")
     
@@ -66,6 +71,12 @@ async def search_all(
         # при allowed_collections=None (веб/гость) сюда не попадаем никогда
         for k_s in BITRIX_COLLECTIONS:
             if k_s in allowed_collections:
+                collections_to_search[k_s] = BITRIX_COLLECTIONS[k_s]
+    else:
+        # Веб-клиент/гость: bitrix только по тумблерам из админки
+        # («Источники контекста»); по умолчанию все выключены
+        for k_s in BITRIX_COLLECTIONS:
+            if web_bitrix.get(k_s):
                 collections_to_search[k_s] = BITRIX_COLLECTIONS[k_s]
 
     print(f"🔍 Коллекции: {list(collections_to_search.keys())}")

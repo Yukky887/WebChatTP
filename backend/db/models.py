@@ -107,6 +107,10 @@ class ContextSettings(Base):
     id = Column(Integer, primary_key=True)
     use_tickets = Column(Boolean, default=True)
     use_documentation = Column(Boolean, default=True)
+    # Bitrix-скоупы (BitInfo_*), включённые в веб-контекст: {"bitrix_wiki": True, ...}.
+    # NULL / отсутствующий ключ = выключен (веб-клиент и гость bitrix не ищут).
+    # API-токенам эти галочки не важны — у них свои скоупы токена.
+    bitrix_scopes = Column(JSONB, nullable=True)
     tickets_limit = Column(Integer, default=5)
     docs_limit = Column(Integer, default=5)
     created_at = Column(DateTime, default=datetime.utcnow)

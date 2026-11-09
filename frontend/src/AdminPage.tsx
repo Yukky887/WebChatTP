@@ -28,9 +28,14 @@ const AdminPage: React.FC = () => {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [saved, setSaved] = useState(false);
-  const [searchSettings, setSearchSettings] = useState({
+  const [searchSettings, setSearchSettings] = useState<{
+    use_tickets: boolean;
+    use_documentation: boolean;
+    bitrix_scopes: Record<string, boolean>;
+  }>({
     use_tickets: true,
     use_documentation: true,
+    bitrix_scopes: {},
   });
 
   // Загружаем настройки при авторизации
@@ -45,6 +50,7 @@ const AdminPage: React.FC = () => {
       setSearchSettings({
         use_tickets: settings.search_settings?.use_tickets ?? true,
         use_documentation: settings.search_settings?.use_documentation ?? true,
+        bitrix_scopes: settings.search_settings?.bitrix_scopes ?? {},
       });
     }
   }, [settings]);
@@ -76,9 +82,25 @@ const AdminPage: React.FC = () => {
   const handleToggleDocumentation = async (enabled: boolean) => {
     setSearchSettings(prev => ({ ...prev, use_documentation: enabled }));
     try {
-      await adminApi.updateSearchSettings(searchSettings.use_tickets, enabled);
+      await adminApi.updateSearchSettings(searchSettings.use_tickets, enabled, searchSettings.bitrix_scopes);
     } catch (e) {
       console.error('Toggle documentation error:', e);
+    }
+  };
+
+  const handleToggleBitrix = async (scope: string, enabled: boolean) => {
+    setSearchSettings(prev => ({
+      ...prev,
+      bitrix_scopes: { ...prev.bitrix_scopes, [scope]: enabled },
+    }));
+    try {
+      await adminApi.updateSearchSettings(
+        searchSettings.use_tickets,
+        searchSettings.use_documentation,
+        { ...searchSettings.bitrix_scopes, [scope]: enabled },
+      );
+    } catch (e) {
+      console.error('Toggle bitrix scope error:', e);
     }
   };
 
@@ -179,9 +201,11 @@ const AdminPage: React.FC = () => {
             <SearchSettingsPanel
               useTickets={searchSettings.use_tickets}
               useDocumentation={searchSettings.use_documentation}
+              bitrixScopes={searchSettings.bitrix_scopes}
               loading={loading}
               onToggleTickets={handleToggleTickets}
               onToggleDocumentation={handleToggleDocumentation}
+              onToggleBitrix={handleToggleBitrix}
             />
 
             <ApiTokensPanel />

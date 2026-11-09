@@ -55,10 +55,19 @@ export const adminApi = {
     return response.data;
   },
 
-  async updateSearchSettings(useTickets: boolean, useDocumentation: boolean): Promise<void> {
-    await client.post('/admin/search-settings', null, {
-      params: { use_tickets: useTickets, use_documentation: useDocumentation },
-    });
+  async updateSearchSettings(
+    useTickets: boolean,
+    useDocumentation: boolean,
+    bitrixScopes?: Record<string, boolean>,
+  ): Promise<SearchSettings> {
+    // bitrix_scopes — единственный body-параметр: FastAPI без вложения,
+    // поэтому шлём сам словарь (не { bitrix_scopes: ... })
+    const response = await client.post(
+      '/admin/search-settings',
+      bitrixScopes || {},
+      { params: { use_tickets: useTickets, use_documentation: useDocumentation } },
+    );
+    return response.data;
   },
 
   // ==================== API-токены ====================

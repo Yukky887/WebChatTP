@@ -62,13 +62,25 @@ class SettingsRepository:
         self,
         use_tickets: Optional[bool] = None,
         use_documentation: Optional[bool] = None,
+        bitrix_scopes: Optional[Dict] = None,
     ) -> ContextSettings:
-        """Обновляет настройки контекста"""
+        """Обновляет настройки контекста.
+
+        `bitrix_scopes` — словарь {скоуп: bool} (клиенты bitrix_*), ключи вне
+        BITRIX_COLLECTIONS отбрасываются; missing ключи просто остаются как были.
+        """
+        from config import BITRIX_COLLECTIONS
         settings = await self.get_context_settings()
         if use_tickets is not None:
             settings.use_tickets = use_tickets
         if use_documentation is not None:
             settings.use_documentation = use_documentation
+        if bitrix_scopes is not None:
+            current = dict(settings.bitrix_scopes or {})
+            for k_s, v in bitrix_scopes.items():
+                if k_s in BITRIX_COLLECTIONS:
+                    current[k_s] = bool(v)
+            settings.bitrix_scopes = current
         await self.db.commit()
         await self.db.refresh(settings)
         return settings

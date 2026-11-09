@@ -140,6 +140,8 @@ export interface ProviderModels {
 export interface SearchSettings {
   use_tickets: boolean;
   use_documentation: boolean;
+  /** Bitrix-скоупы в веб-контексте (БитInfo_*); ключи отсутствуют/NULL => выключено */
+  bitrix_scopes?: Record<string, boolean>;
 }
 
 export interface AdminSettingsResponse {
