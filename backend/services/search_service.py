@@ -5,7 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import collection_exists, search_in_collection
 from embeddings import get_docs_embedding, get_ticket_embedding
-from config import QDRANT_COLLECTIONS, BITRIX_COLLECTIONS, BITRIX_VECTOR_NAME, SEARCH_LIMITS
+from config import (
+    QDRANT_COLLECTIONS, BITRIX_COLLECTIONS, BITRIX_VECTOR_NAME, SEARCH_LIMITS
+)
+from config import BITRIXINFO_URL
 from db.repositories import SettingsRepository
 
 
@@ -147,6 +150,14 @@ def _process_point(collection_type: str, point) -> Dict:
         }
     elif collection_type in BITRIX_COLLECTIONS:
         # Payload BitInfo_*: source|doc_id|chunk_i|title|url|ref|product|products|updated|text|files
+        # url: у wiki/doc — абсолютный; у остальных — пусто, строим из
+        # маршрута payload.open + адрес приложения BitrixInfo (BITRIXINFO_URL)
+        url = payload.get("url") or ""
+        if not url:
+            open_route = payload.get("open") or ""
+            base = (BITRIXINFO_URL or "").strip()
+            if base and open_route:
+                url = f"{base.rstrip('/')}/{open_route.lstrip('/')}"
         return {
             "type": "bitrix",
             "collection": collection_type,
@@ -154,7 +165,7 @@ def _process_point(collection_type: str, point) -> Dict:
             "doc_id": payload.get("doc_id", ""),
             "chunk_i": payload.get("chunk_i", 0),
             "title": payload.get("title", ""),
-            "url": payload.get("url", ""),
+            "url": url,
             "ref": payload.get("ref", ""),
             "product": payload.get("product", ""),
             "products": payload.get("products", []),

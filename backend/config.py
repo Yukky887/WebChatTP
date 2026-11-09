@@ -100,6 +100,13 @@ BITRIX_COLLECTIONS = {
 # Имя именованного вектора у BitInfo_* коллекций (передаётся в Qdrant как using)
 BITRIX_VECTOR_NAME = "dense"
 
+# Адрес приложения BitrixInfo — для ссылки на bitrix-источники, у которых нет
+# своего url (kb/lst/markup/ol/olc/saleskb/salesdeal хранят маршрут в payload.open:
+# /api/kb/page/<id>, /api/row/deals/<id>, /api/ol/session/<id> …).
+# Выдаёт администратор BitrixInfo, например "http://192.168.x.x:6800".
+# Пусто → ссылки на эти источники не строятся (LLM указывает источник без url).
+BITRIXINFO_URL = get_env("BITRIXINFO_URL", "")
+
 SEARCH_LIMITS = {
     "tickets": 10,
     "parts_resource": 10,

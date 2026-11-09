@@ -187,31 +187,39 @@ async def process_chat(
     # ========== КОНТЕКСТ ==========
     context_parts = []
     sources = []
-    
+    # Бюджет символов контекста: держим промпт в окне LLM (num_ctx), лишнее
+    # отбрасываем в порядке приоритета (заявки → док → Bitrix24 → интернет)
+    remaining_ctx = 16000
+
     if tickets:
         context_parts.append("### 📋 Заявки ТП:\n")
         for i, t in enumerate(tickets):
-            context_parts.append(
-                f"[Заявка {i+1}] {t.get('header', '')}\n"
-                f"Q: {t.get('question', '')[:5000]}\n"
-                f"A: {t.get('answer', '')[:5000]}"
-            )
+            qa = (f"Q: {t.get('question', '')[:2500]}\n"
+                  f"A: {t.get('answer', '')[:2500]}")
+            line = f"[Заявка {i + 1}] {t.get('header', '')}\nисточник: {t.get('url', '')}\n{qa}"
+            if len(line) > remaining_ctx:
+                continue
+            context_parts.append(line)
+            remaining_ctx -= len(line)
             sources.append({
                 "index": i + 1,
                 "type": "ticket",
                 "title": t.get("header", ""),
                 "url": t.get("url", ""),
                 "score": t.get("score", 0),
-                "content_length": len(t.get("answer", ""))
+                "content_length": len(qa)
             })
-    
+
     if docs:
         context_parts.append("\n### 📚 Документация:\n")
         for i, d in enumerate(docs):
-            context_parts.append(
-                f"[Док {i+1}] {d.get('title', '')}\n"
-                f"{truncate_content(d.get('content', ''))}"
-            )
+            body = truncate_content(d.get("content", ""), 2500)
+            line = (f"[Док {i + 1}] {d.get('title', '')}\n"
+                    f"источник: {d.get('url', '')}\n{body}")
+            if len(line) > remaining_ctx:
+                continue
+            context_parts.append(line)
+            remaining_ctx -= len(line)
             sources.append({
                 "index": len(tickets) + i + 1,
                 "type": "documentation",
@@ -221,27 +229,36 @@ async def process_chat(
                 "content_length": len(d.get("content", ""))
             })
 
-    # BitInfo_* (дампы Bitrix24): только у API-токенов скоупами bitrix_*
+    # BitInfo_* (дампы Bitrix24): только у API-токенов со скоупами bitrix_*
+    # либо с включёнными тумблерами контекста в админке
     if bitrix:
         context_parts.append("\n### 🗂 Данные Bitrix24:\n")
         for i, b in enumerate(bitrix):
             src_label = b.get("title", "") or b.get("doc_id", "")
-            context_parts.append(
-                f"[Bitrix {i+1}] {src_label}\n"
-                f"источник: {b.get('source', '')} | обновлён: {b.get('updated', '') or '±'}\n"
-                f"{truncate_content(b.get('content', ''))}"
-            )
+            body = truncate_content(b.get("content", ""), 2000)
+            url = b.get("url", "")
+            if url:
+                src_line = url
+            else:
+                src_line = f"Bitrix24 ({b.get('source', '')} №{b.get('ref', '') or '?'}), прямой ссылки нет"
+            line = (f"[Bitrix {i + 1}] {src_label}\n"
+                    f"источник: {src_line}\n"
+                    f"обновлён: {b.get('updated', '') or '±'}\n{body}")
+            if len(line) > remaining_ctx:
+                continue
+            context_parts.append(line)
+            remaining_ctx -= len(line)
             sources.append({
                 "index": len(tickets) + len(docs) + i + 1,
                 "type": "bitrix",
                 "title": src_label,
                 "source": b.get("source", ""),
                 "doc_id": b.get("doc_id", ""),
-                "url": b.get("url", ""),
+                "url": url,
                 "score": b.get("score", 0),
                 "content_length": len(b.get("content", ""))
             })
-    
+
     context_text = "\n\n".join(context_parts) if context_parts else "Контекст не найден."
 
     # «Умный поиск»: блок интернета добавляем в контекст
@@ -249,11 +266,12 @@ async def process_chat(
         context_parts.append("\n### 🌐 Информация из интернета:\n")
         for i, w in enumerate(web_results):
             content = (w.get("content", "") or "")[:800]
-            context_parts.append(
-                f"[Web {i+1}] {w.get('title', '')}\n"
-                f"{w.get('url', '')}\n"
-                f"{content}"
-            )
+            line = (f"[Web {i + 1}] {w.get('title', '')}\n"
+                    f"источник: {w.get('url', '')}\n{content}")
+            if len(line) > remaining_ctx:
+                continue
+            context_parts.append(line)
+            remaining_ctx -= len(line)
             sources.append({
                 "index": len(tickets) + len(docs) + len(bitrix) + i + 1,
                 "type": "web",
@@ -270,18 +288,21 @@ async def process_chat(
     )
     
     # ========== ПРОМПТ ==========
-    system_prompt = f"""Ты - ассистент по {program_name}.
+    system_prompt = f"""Ты - ассистент техподдержки по {program_name}.
 
 КОНТЕКСТ ({context_scope}):
 {context_text}
 
 Правила:
-1. Отвечай только по доступному скоупу: {context_scope}
-2. Используй заявки ТП как приоритет
-3. Документация дополняет
-4. Данные Bitrix24 (🗂 — общие линии, сделки, справочники CRM) — внутренний источник; подключай, когда вопрос касается Bitrix/сделок/переписок, либо когда заявок и документации недостаточно
-5. Информация из интернета (🌐) — вспомогательная; применяй её, когда внутренней базы недостаточно, и упомяни, что взято из интернета
-6. Если информации недостаточно — скажи об этом
+1. Отвечай строго по данным из КОНТЕКСТА. Чего в контексте нет — так и скажи («в базе таких данных не нашёл»), не выдумывай
+2. Возле каждого факта ставь номер источника из контекста: [Заявка 2], [Док 3], [Bitrix 1], [Web 2]
+3. В самом конце ответа добавь блок «Источники:» — построчно в формате markdown-ссылок:
+   - [Заявка 2 — короткий заголовок](http://...)
+   - [Док 3 — короткий заголовок](http://...)
+   Используй РОВНО те url, что даны в строке «источник:» рядом с источником. Если у источника url нет (у Bitrix24 так бывает) — укажи его без ссылки: [Bitrix 1 — короткий заголовок]. НИКОГДА не сочиняй адреса
+4. Если данные из разных источников противоречат — доверяй более свежему (см. даты) и отметь противоречие
+5. Информация из интернета (🌐) — вспомогательная; упомяни, что это из интернета
+6. Отвечай по-русски, структурно и по делу: заголовки, списки, конкретные шаги. Без воды
 """
     
     if has_images:
