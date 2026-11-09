@@ -81,10 +81,40 @@ QDRANT_COLLECTIONS = {
     "parts_intellect": "PartsIntellect"
 }
 
+# Выгрузки Bitrix24 (индексирует внешний процесс, хост 192.168.128.123).
+# Требуют ИМЕНОВАННЫЙ вектор "dense" (2560, qwen3-embedding-4b) — как у tickets.
+# В веб-клиенте/гостю НЕ подмешиваются: только скоупы API-токенов
+# (bitrix_* появляется в allowed_scopes админки автоматически).
+BITRIX_COLLECTIONS = {
+    "bitrix_wiki":      "BitInfo_wiki",       # Wiki Bitrix
+    "bitrix_doc":       "BitInfo_doc",        # Документация Битрикс24
+    "bitrix_kb":        "BitInfo_kb",         # База знаний CRM
+    "bitrix_lst":       "BitInfo_lst",        # Списки CRM (элементы)
+    "bitrix_markup":    "BitInfo_markup",     # Разметка сделок
+    "bitrix_ol":        "BitInfo_ol",         # Открытые линии — переписки
+    "bitrix_olc":       "BitInfo_olc",        # Открытые линии — чаты
+    "bitrix_saleskb":   "BitInfo_saleskb",    # База знаний продаж
+    "bitrix_salesdeal": "BitInfo_salesdeal",  # Сделки CRM (крупнейшая, ~200k чанков)
+}
+
+# Имя именованного вектора у BitInfo_* коллекций (передаётся в Qdrant как using)
+BITRIX_VECTOR_NAME = "dense"
+
 SEARCH_LIMITS = {
     "tickets": 10,
     "parts_resource": 10,
-    "parts_intellect": 10
+    "parts_intellect": 10,
+    # BitInfo: чанки мелкие и их много, держим умеренные лимиты,
+    # чтобы LLM-контекст не разбухал (за запрос ≤ ~45 bitrix-чанков)
+    "bitrix_wiki": 8,
+    "bitrix_doc": 8,
+    "bitrix_kb": 8,
+    "bitrix_markup": 8,
+    "bitrix_lst": 5,
+    "bitrix_ol": 5,
+    "bitrix_olc": 5,
+    "bitrix_saleskb": 5,
+    "bitrix_salesdeal": 5,
 }
 
 # ==================== JWT ====================

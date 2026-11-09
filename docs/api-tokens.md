@@ -3,14 +3,29 @@
 Токен выдаётся в админ-панели → «🔑 API-токены» → «Сгенерировать».
 Для каждого отдела задаётся набор коллекций, по которым разрешён поиск:
 
-| Скоуп | Что это |
-|---|---|
-| `tickets` | Заявки ТП (история запросов техподдержки) |
-| `parts_intellect` | Документация Parts.Intellect |
-| `parts_resource` | Документация Parts.Resource |
+| Скоуп | Коллекция Qdrant | Что это | Чанков |
+|---|---|---|---|
+| `tickets` | `TsSpKb` | Заявки ТП (история запросов техподдержки) | ~2 000 |
+| `parts_intellect` | `PartsIntellect` | Документация Parts.Intellect | ~850 |
+| `parts_resource` | `PartsResource` | Документация Parts.Resource | ~840 |
+| `bitrix_wiki` | `BitInfo_wiki` | Wiki Битрикс24 | ~3 200 |
+| `bitrix_doc` | `BitInfo_doc` | Документация Битрикс24 | ~7 000 |
+| `bitrix_kb` | `BitInfo_kb` | База знаний CRM | ~940 |
+| `bitrix_lst` | `BitInfo_lst` | Списки CRM (элементы) | ~220 |
+| `bitrix_markup` | `BitInfo_markup` | Разметка сделок | ~16 900 |
+| `bitrix_ol` | `BitInfo_ol` | Открытые линии — переписки | ~6 900 |
+| `bitrix_olc` | `BitInfo_olc` | Открытые линии — чаты | ~6 200 |
+| `bitrix_saleskb` | `BitInfo_saleskb` | База знаний продаж | ~190 |
+| `bitrix_salesdeal` | `BitInfo_salesdeal` | Сделки CRM | ~199 500 |
 
-Примеры профилей: отдел ТП — все три галочки; отдел продаж — только
-`parts_intellect` + `parts_resource` (заявки ТП недоступны).
+Bitrix-скоупы (`bitrix_*`) — выгрузки Bitrix24 (только чтение, обновляются своим
+процессом индексации). Они доступны **исключительно через API-токены**:
+веб-клиент и гостевой режим эти коллекции никогда не ищут. Скоупы bitrix
+появляются в админке автоматически.
+
+Примеры профилей: отдел ТП — `tickets` + обе документации; отдел продаж —
+`bitrix_salesdeal` + `bitrix_markup` + обе документации; общая справочная —
+`bitrix_wiki` + `bitrix_doc` + обе документации.
 
 Значение токена показывается **один раз** при создании (в БД хранится только
 sha256-хэш). Токен можно включать/выключать (переключатель «Активен») и
@@ -52,7 +67,7 @@ curl -s -X POST https://<host>:8000/api/chat \
 {
   "session_id": "uuid-диалога",
   "answer": "Текст ответа модели…",
-  "sources": [ { "index": 1, "type": "ticket|documentation|web",
+  "sources": [ { "index": 1, "type": "ticket|documentation|bitrix|web",
                  "title": "...", "url": "...", "score": 0.87 } ],
   "provider": "llamacpp", "model": "...",
   "usage": { "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0 }
@@ -61,9 +76,14 @@ curl -s -X POST https://<host>:8000/api/chat \
 
 Комментарии в JSON выше — иллюстративные; передавать нужно валидный JSON без них.
 
+Источники `bitrix` несут служебные поля: `source` (wiki/doc/kb/lst/markup/ol/
+olc/saleskb/salesdeal), `doc_id` (`"<source>:<ключ>"`), `url` и, при наличии,
+`ref`/`products`/`updated`. В контекст ответа LLM попадают не более 8
+bitrix-фрагментов (топ по релевантности).
+
 Поиск идёт ТОЛЬКО по скоупам токена. Например, токен «продажи»
-(`parts_intellect` + `parts_resource`) никогда не увидит источники-заявки,
-даже если вопрос касается исторических заявок.
+(`parts_intellect` + `parts_resource`) никогда не увидит источники-заявки
+и bitrix-данные, даже если вопрос касается исторических заявок.
 
 ### POST /api/search — только поиск по базе знаний (без LLM)
 
@@ -73,8 +93,10 @@ curl -s -X POST https://<host>:8000/api/search \
   -d '{"query": "не загружается прайс-лист"}'
 ```
 
-Ответ — ранжированные фрагменты `results` с типами `ticket`/`documentation`
-(ограничение те же — скоупы токена).
+Ответ — ранжированные фрагменты `results` с типами `ticket`/`documentation`/
+`bitrix` (ограничение те же — скоупы токена; поиск по bitrix только для токенов
+со скоупами `bitrix_*`). В чанках bitrix есть поля `source`, `doc_id`,
+`content` (текст фрагмента), `title`, `url`, `score`.
 
 ### GET /api/providers — доступные провайдеры и модели
 

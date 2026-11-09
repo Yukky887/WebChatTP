@@ -160,6 +160,7 @@ async def process_chat(
     # ========== ПОИСК (только для текстовых сообщений; у картинок RAG не гоняем) ==========
     tickets: List[Dict] = []
     docs: List[Dict] = []
+    bitrix: List[Dict] = []
     context_text = ""
     web_results: List[Dict] = []
 
@@ -171,6 +172,9 @@ async def process_chat(
 
         tickets = [r for r in search_results if r.get("type") == "ticket"][:10]
         docs = [r for r in search_results if r.get("type") == "documentation"][:10]
+        # BitInfo_* (дампы Bitrix24): только для API-токенов со скоупами bitrix_*;
+        # топ-8 по релевантности, чтобы LLM-контекст не разбухал
+        bitrix = [r for r in search_results if r.get("type") == "bitrix"][:8]
 
         # «Умный поиск»: дополнительное обращение к интернету
         if use_web:
@@ -216,6 +220,27 @@ async def process_chat(
                 "score": d.get("score", 0),
                 "content_length": len(d.get("content", ""))
             })
+
+    # BitInfo_* (дампы Bitrix24): только у API-токенов скоупами bitrix_*
+    if bitrix:
+        context_parts.append("\n### 🗂 Данные Bitrix24:\n")
+        for i, b in enumerate(bitrix):
+            src_label = b.get("title", "") or b.get("doc_id", "")
+            context_parts.append(
+                f"[Bitrix {i+1}] {src_label}\n"
+                f"источник: {b.get('source', '')} | обновлён: {b.get('updated', '') or '±'}\n"
+                f"{truncate_content(b.get('content', ''))}"
+            )
+            sources.append({
+                "index": len(tickets) + len(docs) + i + 1,
+                "type": "bitrix",
+                "title": src_label,
+                "source": b.get("source", ""),
+                "doc_id": b.get("doc_id", ""),
+                "url": b.get("url", ""),
+                "score": b.get("score", 0),
+                "content_length": len(b.get("content", ""))
+            })
     
     context_text = "\n\n".join(context_parts) if context_parts else "Контекст не найден."
 
@@ -230,7 +255,7 @@ async def process_chat(
                 f"{content}"
             )
             sources.append({
-                "index": len(tickets) + len(docs) + i + 1,
+                "index": len(tickets) + len(docs) + len(bitrix) + i + 1,
                 "type": "web",
                 "title": w.get("title", ""),
                 "url": w.get("url", ""),
@@ -240,19 +265,23 @@ async def process_chat(
         context_text = "\n\n".join(context_parts)
 
     program_name = "Parts.Intellect" if detected_program == "intellect" else "Parts.Resource"
+    context_scope = (
+        f"{program_name} + внутренние данные Bitrix24" if bitrix else program_name
+    )
     
     # ========== ПРОМПТ ==========
     system_prompt = f"""Ты - ассистент по {program_name}.
 
-КОНТЕКСТ (только {program_name}):
+КОНТЕКСТ ({context_scope}):
 {context_text}
 
 Правила:
-1. Отвечай только по {program_name}
+1. Отвечай только по доступному скоупу: {context_scope}
 2. Используй заявки ТП как приоритет
 3. Документация дополняет
-4. Информация из интернета (🌐) — вспомогательная; применяй её, когда внутренней базы недостаточно, и упомяни, что взято из интернета
-5. Если информации недостаточно — скажи об этом
+4. Данные Bitrix24 (🗂 — общие линии, сделки, справочники CRM) — внутренний источник; подключай, когда вопрос касается Bitrix/сделок/переписок, либо когда заявок и документации недостаточно
+5. Информация из интернета (🌐) — вспомогательная; применяй её, когда внутренней базы недостаточно, и упомяни, что взято из интернета
+6. Если информации недостаточно — скажи об этом
 """
     
     if has_images:

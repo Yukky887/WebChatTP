@@ -3,14 +3,14 @@
 
 Токен генерируется при создании и показывается ОДИН РАЗ — в БД хранится
 только его sha256-хэш. Скоупы = доступные коллекции поиска:
-"tickets", "parts_intellect", "parts_resource".
+"tickets", "parts_intellect", "parts_resource" + "bitrix_*" (дампы Bitrix24).
 """
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
-from config import QDRANT_COLLECTIONS
+from config import QDRANT_COLLECTIONS, BITRIX_COLLECTIONS
 from db.session import get_db
 from db.models import ApiToken, User
 from db.repositories import ApiTokenRepository
@@ -19,8 +19,8 @@ import secrets
 
 router = APIRouter(prefix="/api/admin/tokens", tags=["Админ · API-токены"])
 
-# Разрешённые скоупы = ключи QDRANT_COLLECTIONS
-ALLOWED_SCOPES = list(QDRANT_COLLECTIONS.keys())
+# Разрешённые скоупы = наши коллекции + BitInfo_* (Bitrix24, только по токенам)
+ALLOWED_SCOPES = list(QDRANT_COLLECTIONS.keys()) + list(BITRIX_COLLECTIONS.keys())
 
 
 class TokenCreate(BaseModel):

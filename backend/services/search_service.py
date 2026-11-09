@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import collection_exists, search_in_collection
 from embeddings import get_docs_embedding, get_ticket_embedding
-from config import QDRANT_COLLECTIONS, SEARCH_LIMITS
+from config import QDRANT_COLLECTIONS, BITRIX_COLLECTIONS, BITRIX_VECTOR_NAME, SEARCH_LIMITS
 from db.repositories import SettingsRepository
 
 
@@ -20,7 +20,9 @@ async def search_all(
 
     Настройки (use_tickets, use_documentation) читаются из БД если передана сессия.
     `allowed_collections` — ограничение скоупами (для API-токенов):
-    список из "tickets" / "parts_intellect" / "parts_resource"; None — ограничений нет.
+    список из "tickets" / "parts_intellect" / "parts_resource" / "bitrix_*"; None —
+    ограничений нет. BitInfo_* (дампы Bitrix24) ищутся ТОЛЬКО если разрешены
+    явными скоупами токена — веб-клиент и гость их никогда не видят.
     """
     results = []
     
@@ -60,25 +62,40 @@ async def search_all(
         collections_to_search = {
             k: v for k, v in collections_to_search.items() if k in allowed_collections
         }
-    
+        # BitInfo_* (дампы Bitrix24) — только через скоупы API-токена:
+        # при allowed_collections=None (веб/гость) сюда не попадаем никогда
+        for k_s in BITRIX_COLLECTIONS:
+            if k_s in allowed_collections:
+                collections_to_search[k_s] = BITRIX_COLLECTIONS[k_s]
+
     print(f"🔍 Коллекции: {list(collections_to_search.keys())}")
-    
+
     # Векторизуем
     docs_vector = get_docs_embedding(query)
     tickets_vector = await get_ticket_embedding(query)
-    
+
     for collection_type, collection_name in collections_to_search.items():
         if not collection_name:
             continue
-        
+
         if not collection_exists(collection_name):
             print(f"⚠️ Коллекция {collection_name} не найдена")
             continue
-        
-        vector = tickets_vector if collection_type == "tickets" else docs_vector
+
+        # BitInfo_* индексировались той же моделью, что и заявки ТП
+        # (qwen3-embedding-4b, 2560) — но вектор там именованный ("dense")
+        if collection_type in BITRIX_COLLECTIONS:
+            vector = tickets_vector
+            using = BITRIX_VECTOR_NAME
+        elif collection_type == "tickets":
+            vector = tickets_vector
+            using = None
+        else:
+            vector = docs_vector
+            using = None
         limit = SEARCH_LIMITS.get(collection_type, 10)
-        
-        points = search_in_collection(collection_name, vector, limit)
+
+        points = search_in_collection(collection_name, vector, limit, using=using)
         
         for p in points:
             result = _process_point(collection_type, p)
@@ -89,7 +106,8 @@ async def search_all(
     
     tickets = sum(1 for r in results if r.get("type") == "ticket")
     docs = sum(1 for r in results if r.get("type") == "documentation")
-    print(f"✅ Итого: {tickets} заявок + {docs} документации")
+    bitrix = sum(1 for r in results if r.get("type") == "bitrix")
+    print(f"✅ Итого: {tickets} заявок + {docs} документации + {bitrix} bitrix-чанков")
     
     return results
 
@@ -114,6 +132,24 @@ def _process_point(collection_type: str, point) -> Dict:
             "keywords": payload.get("keywords", []),
             "filename": filename,
             "url": url,
+            "score": score
+        }
+    elif collection_type in BITRIX_COLLECTIONS:
+        # Payload BitInfo_*: source|doc_id|chunk_i|title|url|ref|product|products|updated|text|files
+        return {
+            "type": "bitrix",
+            "collection": collection_type,
+            "source": payload.get("source", ""),
+            "doc_id": payload.get("doc_id", ""),
+            "chunk_i": payload.get("chunk_i", 0),
+            "title": payload.get("title", ""),
+            "url": payload.get("url", ""),
+            "ref": payload.get("ref", ""),
+            "product": payload.get("product", ""),
+            "products": payload.get("products", []),
+            "updated": str(payload.get("updated", "") or ""),
+            "content": payload.get("text", ""),
+            "files": payload.get("files", []),
             "score": score
         }
     else:

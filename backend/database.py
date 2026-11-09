@@ -17,19 +17,32 @@ def collection_exists(name: str) -> bool:
     """Проверяет существование коллекции"""
     return name in get_existing_collections()
 
-def search_in_collection(collection_name: str, vector: List[float], limit: int = 5):
-    """Поиск в коллекции с fallback на старый API"""
+def search_in_collection(collection_name: str, vector: List[float], limit: int = 5,
+                         using: str = None):
+    """Поиск в коллекции с fallback на старый API.
+
+    `using` — имя именованного вектора (BitInfo_* коллекции хранят вектор
+    как "dense"); None — обычная безымянная коллекция.
+    """
     try:
         r = qdrant_client.query_points(
             collection_name=collection_name,
             query=vector,
+            using=using,
             limit=limit
         )
         return r.points
     except AttributeError:
+        legacy_vector = vector
+        if using:
+            try:
+                from qdrant_client import models
+                legacy_vector = models.NamedVector(name=using, vector=vector)
+            except Exception:
+                pass
         return qdrant_client.search(
             collection_name=collection_name,
-            query_vector=vector,
+            query_vector=legacy_vector,
             limit=limit
         )
     except Exception as e:

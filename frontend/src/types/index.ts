@@ -182,6 +182,15 @@ export const API_SCOPE_LABELS: Record<string, string> = {
   tickets: 'Заявки ТП',
   parts_intellect: 'Документация Parts.Intellect',
   parts_resource: 'Документация Parts.Resource',
+  bitrix_wiki: 'Bitrix · Wiki',
+  bitrix_doc: 'Bitrix · Документация Б24',
+  bitrix_kb: 'Bitrix · База знаний CRM',
+  bitrix_lst: 'Bitrix · Списки CRM',
+  bitrix_markup: 'Bitrix · Разметка сделок',
+  bitrix_ol: 'Bitrix · Открытые линии',
+  bitrix_olc: 'Bitrix · Чаты открытых линий',
+  bitrix_saleskb: 'Bitrix · База знаний продаж',
+  bitrix_salesdeal: 'Bitrix · Сделки CRM',
 };
 
 export interface ApiToken {
