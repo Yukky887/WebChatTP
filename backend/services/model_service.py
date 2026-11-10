@@ -18,7 +18,9 @@ async def fetch_provider_models(provider: LLMProvider) -> List[str]:
     import httpx
     
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        # Короткий таймаут опроса: health-ручка ждёт все провайдеры внутри,
+        # и docker healthcheck (10с) не должен ломаться о недоступный llama.cpp
+        async with httpx.AsyncClient(timeout=httpx.Timeout(6.0, connect=2.0)) as client:
             headers = {}
             if provider.api_key_encrypted:
                 headers["Authorization"] = f"Bearer {provider.api_key_encrypted}"
