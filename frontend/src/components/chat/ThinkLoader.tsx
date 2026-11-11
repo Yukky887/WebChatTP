@@ -77,7 +77,7 @@ export const ThinkLoader: React.FC = () => {
         dangerouslySetInnerHTML={{ __html: frames[frame] }}
       />
       <Typography variant="body2" sx={{ color: '#555', mt: 1, letterSpacing: 0.4 }}>
-        агент думает...
+        Ассистент думает...
       </Typography>
     </Box>
   );
