@@ -6,3 +6,4 @@ export { ChatInput } from './ChatInput';
 export { ProviderSelector } from './ProviderSelector';
 export { ProgramButtons } from './ProgramButtons';
 export { ProgramBadge } from './ProgramBadge';
+export { ThinkLoader } from './ThinkLoader';

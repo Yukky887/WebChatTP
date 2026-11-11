@@ -1,9 +1,10 @@
 import React from 'react';
-import { Box, Typography, CircularProgress } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { QuestionAnswer as QuestionIcon } from '@mui/icons-material';
 import { Message } from '../../types';
 import { MessageBubble } from './MessageBubble';
 import { ProgramButtons } from './ProgramButtons';
+import { ThinkLoader } from './ThinkLoader';
 
 interface ChatMessagesProps {
   messages: Message[];
@@ -61,14 +62,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             <ProgramButtons onSelect={onProgramSelect} />
           )}
           
-          {loading && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, my: 2 }}>
-              <CircularProgress size={20} />
-              <Typography variant="body2" color="text.secondary">
-                Ассистент думает...
-              </Typography>
-            </Box>
-          )}
+          {loading && <ThinkLoader />}
           
           {error && (
             <Typography variant="body2" color="error" sx={{ mt: 1 }}>
