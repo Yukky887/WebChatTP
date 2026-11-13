@@ -211,11 +211,19 @@ $('btnShot').addEventListener('click', async () => {
   try {
     const tab = await activeTab();
     if (!tab?.windowId) throw new Error('Нет активной вкладки');
+    if (/^(chrome|edge|about|devtools|chrome-extension|view-source):/.test(tab.url || '')) {
+      throw new Error('Скриншот нельзя сделать на служебной странице (chrome:// и т.п.)');
+    }
     shotUri = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 80 });
     if (shotUri.length > 14_000_000) throw new Error('Скриншот слишком большой, попробуйте ещё раз');
     refreshChips();
   } catch (e) {
-    addErrorMsg(`👁 ${e.message || e}\n(скриншот недоступен на служебных страницах chrome://)`);
+    const m = String(e.message || e);
+    if (m.includes('activeTab') || m.includes('all_urls')) {
+      addErrorMsg('👁 Нет разрешения на захват экрана.\nОткрой chrome://extensions → «Parts Ассистент» → «Сведения о расширении» → «Доступ к сайтам» = «На всех сайтах» и перезагрузи расширение.');
+    } else {
+      addErrorMsg(`👁 ${m}`);
+    }
   }
 });
 
