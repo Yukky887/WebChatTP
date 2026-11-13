@@ -1,7 +1,7 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 from uuid import UUID
 from datetime import datetime
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, asc, case, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import ChatSession, Message, MessageSource, MessageUsage
@@ -174,3 +174,134 @@ class ChatRepository:
         if session:
             await self.db.delete(session)
             await self.db.commit()
+
+    # ---------- Эскалация «бот → живой специалист» ----------
+
+    async def set_session_status(
+        self,
+        session_id: UUID,
+        status: str,
+        operator_id: Optional[int] = None,
+        clear_operator: bool = False,
+        escalated: bool = False,
+        closed: bool = False,
+    ) -> Optional[ChatSession]:
+        """Меняет статус сессии (эскалация).
+
+        operator_id — закрепить оператора; clear_operator — сбросить;
+        escalated — проставить escalated_at «позвал спеца»;
+        closed — проставить closed_at (переоткрытие сбрасывает его).
+        """
+        session = await self.get_session(session_id)
+        if not session:
+            return None
+        session.status = status
+        if clear_operator:
+            session.operator_id = None
+        elif operator_id is not None:
+            session.operator_id = operator_id
+        if escalated:
+            session.escalated_at = datetime.utcnow()
+        if closed:
+            session.closed_at = datetime.utcnow()
+        elif status != 'closed':
+            session.closed_at = None
+        session.updated_at = datetime.utcnow()
+        await self.db.commit()
+        await self.db.refresh(session)
+        return session
+
+    async def list_sessions_admin(
+        self,
+        status: Optional[str] = None,
+        token_id: Optional[int] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[ChatSession]:
+        """Список сессий для админки: сначала эскалации, далее по свежести.
+
+        status='escalations' — обе фазы эскалации (waiting_operator +
+        operator_active); иначе — точное значение статуса.
+        """
+        q = select(ChatSession)
+        if status:
+            if status == 'escalations':
+                q = q.where(ChatSession.status.in_(['waiting_operator', 'operator_active']))
+            else:
+                q = q.where(ChatSession.status == status)
+        if token_id:
+            q = q.where(ChatSession.api_token_id == token_id)
+        priority = case(
+            (ChatSession.status.in_(['waiting_operator', 'operator_active']), 0),
+            (ChatSession.status == 'active', 1),
+            else_=2,
+        )
+        q = q.order_by(asc(priority), desc(ChatSession.updated_at))
+        q = q.limit(limit).offset(offset)
+        result = await self.db.execute(q)
+        return list(result.scalars().all())
+
+    async def message_counts(self, session_ids: List[UUID]) -> Dict[UUID, int]:
+        """Число сообщений по каждой сессии"""
+        if not session_ids:
+            return {}
+        result = await self.db.execute(
+            select(Message.session_id, func.count(Message.id))
+            .where(Message.session_id.in_(session_ids))
+            .group_by(Message.session_id)
+        )
+        return {sid: cnt for sid, cnt in result.all()}
+
+    async def last_messages(self, session_ids: List[UUID]) -> Dict[UUID, Message]:
+        """Последнее сообщение каждой сессии (для превью в списке)"""
+        if not session_ids:
+            return {}
+        result = await self.db.execute(
+            select(Message)
+            .where(Message.session_id.in_(session_ids))
+            .order_by(
+                Message.session_id,
+                desc(Message.created_at), desc(Message.id),
+            )
+            .distinct_on(Message.session_id)
+        )
+        return {m.session_id: m for m in result.scalars().all()}
+
+    async def get_transcript_messages(
+        self, session_id: UUID, limit: int = 500,
+    ) -> List[Message]:
+        """Полная переписка сессии в хронологическом порядке"""
+        result = await self.db.execute(
+            select(Message)
+            .where(Message.session_id == session_id)
+            .order_by(asc(Message.created_at), asc(Message.id))
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def sources_for_messages(
+        self, message_ids: List[int],
+    ) -> Dict[int, List[MessageSource]]:
+        """Источники сообщений, сгруппированные по message_id"""
+        if not message_ids:
+            return {}
+        result = await self.db.execute(
+            select(MessageSource)
+            .where(MessageSource.message_id.in_(message_ids))
+            .order_by(asc(MessageSource.source_index))
+        )
+        grouped: Dict[int, List[MessageSource]] = {}
+        for s in result.scalars().all():
+            grouped.setdefault(s.message_id, []).append(s)
+        return grouped
+
+    async def usage_for_messages(
+        self, message_ids: List[int],
+    ) -> Dict[int, MessageUsage]:
+        """Usage сообщений, сгруппированный по message_id"""
+        if not message_ids:
+            return {}
+        result = await self.db.execute(
+            select(MessageUsage).where(MessageUsage.message_id.in_(message_ids))
+        )
+        return {u.message_id: u for u in result.scalars().all()}

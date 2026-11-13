@@ -27,6 +27,9 @@ class ChatRequest(BaseModel):
     # Страница, с которой задан вопрос (браузерное расширение):
     # добавляется в контекст первым источником [Страница 1]
     page: Optional[PageContext] = None
+    # Эскалация: клиент просит позвать живого специалиста.
+    # Бот ставится на паузу, сессия → waiting_operator.
+    call_operator: bool = False
 
 class UsageInfo(BaseModel):
     prompt_tokens: int = 0
@@ -57,6 +60,10 @@ class ChatResponse(BaseModel):
     usage: UsageInfo = UsageInfo()
     program: Optional[str] = None
     needs_program_selection: bool = True
+    # Эскалация: True — флаг call_operator принят, сессия ждёт спеца
+    operator_called: bool = False
+    # Текущий статус сессии (active/waiting_operator/operator_active/closed)
+    session_status: Optional[str] = None
 
 class LLMSettings(BaseModel):
     temperature: float = 0.5

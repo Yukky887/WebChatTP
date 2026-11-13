@@ -66,6 +66,7 @@ async def process_chat(
     attachments: Optional[List[str]] = None,
     use_web: bool = False,
     page: Optional[dict] = None,
+    call_operator: bool = False,
     allowed_collections: Optional[List[str]] = None,
     api_token_id: Optional[int] = None,
     db: Optional[AsyncSession] = None,
@@ -78,6 +79,8 @@ async def process_chat(
     `page` — контекст страницы из браузерного расширения {url, title, text}:
     добавляется в контекст первым источником [Страница 1]; без программы
     (программа не выбрана) поиск не гоняется, ответ строится по странице.
+    `call_operator` — клиент позвал живого специалиста: сессия →
+    waiting_operator, бот ставится на паузу (LLM не вызывается).
     `allowed_collections` — скоупы API-токена (ограничение поиска по коллекциям).
     """
     has_images = bool(attachments)
@@ -141,6 +144,59 @@ async def process_chat(
                 db_session.id, make_session_title(stored_content)
             )
 
+    # ========== ЭСКАЛАЦИЯ «бот → живой специалист» ==========
+    # Статусы: active (бот) → waiting_operator (клиент позвал спеца) →
+    # operator_active (оператор ведёт диалог) → closed.
+    # Бот на паузе при waiting_operator/operator_active: LLM не вызывается,
+    # клиенту возвращается статус, чтобы UI показал «специалист подключится».
+    session_status = (db_session.status or 'active') if db_session else None
+    operator_called = False
+    if chat_repo and db_session and session_status:
+        if session_status == 'closed':
+            # Клиент пишет в закрытую сессию — переоткрываем, бот снова отвечает
+            db_session = await chat_repo.set_session_status(
+                db_session.id, 'active', clear_operator=True)
+            session_status = 'active'
+        if call_operator and session_status == 'active':
+            db_session = await chat_repo.set_session_status(
+                db_session.id, 'waiting_operator',
+                clear_operator=True, escalated=True)
+            session_status = 'waiting_operator'
+            operator_called = True
+        if session_status in ('waiting_operator', 'operator_active'):
+            operator_called = operator_called or call_operator
+            if operator_called:
+                answer = (
+                    "✅ Специалист техподдержки вызван. Бот-ассистент поставлен "
+                    "на паузу — как только специалист подключится, он ответит здесь."
+                )
+            elif session_status == 'operator_active':
+                answer = (
+                    "⏳ Специалист техподдержки уже подключился — ваше сообщение "
+                    "передано ему. Бот-ассистент на паузе и подключится, когда "
+                    "диалог завершится."
+                )
+            else:
+                answer = (
+                    "⏳ Специалист техподдержки уже вызван — ваше сообщение "
+                    "добавлено к переписке. Бот-ассистент на паузе."
+                )
+            return {
+                "session_id": session_id,
+                "answer": answer,
+                "has_questions": False,
+                "suggestions": [],
+                "sources": [],
+                "provider": provider,
+                "model": model,
+                "truncated": False,
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0},
+                "program": detected_program,
+                "needs_program_selection": False,
+                "operator_called": operator_called,
+                "session_status": session_status,
+            }
+
     # ========== НЕТ ПРОГРАММЫ (только для текстовых сообщений без страницы) ==========
     if not detected_program and not has_images and not page:
         return {
@@ -154,7 +210,9 @@ async def process_chat(
             "truncated": False,
             "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0},
             "program": None,
-            "needs_program_selection": True
+            "needs_program_selection": True,
+            "operator_called": False,
+            "session_status": (db_session.status or 'active') if db_session else None,
         }
     
     # Обновляем программу в сессии
@@ -422,5 +480,7 @@ async def process_chat(
         "truncated": "⚠️" in answer,
         "usage": usage,
         "program": detected_program,
-        "needs_program_selection": False
+        "needs_program_selection": False,
+        "operator_called": False,
+        "session_status": (db_session.status or 'active') if db_session else None,
     }

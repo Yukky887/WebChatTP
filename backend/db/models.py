@@ -176,6 +176,11 @@ class ChatSession(Base):
     selected_program = Column(String(50), ForeignKey('programs.id'))
     title = Column(String(255))  # Автоназвание по первому вопросу пользователя
     status = Column(String(20), default='active')
+    # Эскалация «бот → живой специалист»: active → waiting_operator →
+    # operator_active → closed. operator_id — кто взял чат,
+    # escalated_at — когда клиент позвал спеца.
+    operator_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), index=True)
+    escalated_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     closed_at = Column(DateTime)

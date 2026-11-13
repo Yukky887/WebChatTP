@@ -222,6 +222,66 @@ export interface ApiTokenListResponse {
   allowed_scopes: string[];
 }
 
+// ==================== Чаты клиентов (эскалация) ====================
+
+export type ChatSessionStatus =
+  | 'active'           // отвечает бот
+  | 'waiting_operator' // клиент позвал спеца, ждём
+  | 'operator_active'  // оператор ведёт диалог
+  | 'closed';          // сессия закрыта
+
+export interface ClientChatSession {
+  id: string;
+  title: string | null;
+  /** Имя API-токена = клиент (домен/IP); null — веб-клиент или гость */
+  client: string | null;
+  api_token_id: number | null;
+  status: ChatSessionStatus;
+  operator_id: number | null;
+  operator_name?: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  escalated_at: string | null;
+  message_count: number;
+  last_message: string | null;
+  last_role: string | null;
+  last_at: string | null;
+}
+
+export interface ClientChatListResponse {
+  sessions: ClientChatSession[];
+  /** Сколько сессий в статусе эскалации (для бейджа) */
+  waiting: number;
+}
+
+export interface ClientChatSource {
+  type: string;
+  title: string | null;
+  url: string | null;
+  index: number | null;
+  score: number | null;
+}
+
+export interface ClientChatMessage {
+  id: number;
+  role: 'user' | 'assistant' | 'operator';
+  content: string;
+  program_id: string | null;
+  created_at: string | null;
+  sources: ClientChatSource[];
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    cost: number;
+  } | null;
+}
+
+export interface ClientChatDetail {
+  session: ClientChatSession;
+  messages: ClientChatMessage[];
+}
+
 export interface Message {
   role: 'user' | 'assistant';
   content: string;

@@ -5,6 +5,7 @@ import {
   LoginResponse, 
   SearchSettings,
   ApiToken, ApiTokenCreatePayload, ApiTokenCreated, ApiTokenListResponse,
+  ClientChatListResponse, ClientChatDetail,
 } from '../types';
 import config from '../config';
 
@@ -89,5 +90,35 @@ export const adminApi = {
 
   async deleteApiToken(id: number): Promise<void> {
     await client.delete(`/admin/tokens/${id}`);
+  },
+
+  // ==================== Чаты клиентов (эскалация) ====================
+
+  async getClientChats(params?: {
+    status?: string;
+    token_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ClientChatListResponse> {
+    const response = await client.get('/admin/chats', { params });
+    return response.data;
+  },
+
+  async getClientChat(id: string): Promise<ClientChatDetail> {
+    const response = await client.get(`/admin/chats/${id}`);
+    return response.data;
+  },
+
+  /** take/release/resume/close — управление эскалацией */
+  async chatOperatorAction(
+    id: string,
+    action: 'take' | 'release' | 'resume' | 'close',
+  ): Promise<{ session_id: string; status: string; operator_id: number | null }> {
+    const response = await client.post(`/admin/chats/${id}/operator`, { action });
+    return response.data;
+  },
+
+  async sendOperatorMessage(id: string, text: string): Promise<void> {
+    await client.post(`/admin/chats/${id}/message`, { text });
   },
 };

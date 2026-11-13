@@ -92,6 +92,7 @@ async def chat(
         attachments=attachments,
         use_web=request.use_web,
         page=page,
+        call_operator=request.call_operator,
         allowed_collections=api_token.scopes if api_token else None,
         api_token_id=api_token.id if api_token else None,
         db=db,

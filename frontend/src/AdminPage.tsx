@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Card, CardContent, Typography, TextField, Button,
-  Alert, IconButton,
+  Alert, IconButton, Tabs, Tab,
 } from '@mui/material';
 import {
   Lock as LockIcon,
@@ -15,6 +15,7 @@ import { ProvidersPanel } from './components/admin/ProvidersPanel';
 import { ModelsPanel } from './components/admin/ModelsPanel';
 import { SearchSettingsPanel } from './components/admin/SearchSettingsPanel';
 import { ApiTokensPanel } from './components/admin/ApiTokensPanel';
+import { ClientChatsPanel } from './components/admin/ClientChatsPanel';
 import { adminApi } from './api/admin';
 
 const AdminPage: React.FC = () => {
@@ -28,6 +29,8 @@ const AdminPage: React.FC = () => {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [saved, setSaved] = useState(false);
+  // Разделы админки: настройки LLM | чаты клиентов (эскалация)
+  const [section, setSection] = useState<'llm' | 'chats'>('llm');
   const [searchSettings, setSearchSettings] = useState<{
     use_tickets: boolean;
     use_documentation: boolean;
@@ -190,13 +193,22 @@ const AdminPage: React.FC = () => {
 
         {settings ? (
           <Box>
-            <LLMSettingsPanel
-              settings={settings.settings}
-              loading={loading}
-              saved={saved}
-              onSave={handleSaveSettings}
-              onReset={resetSettings}
-            />
+            <Tabs value={section} onChange={(_, v) => setSection(v)} sx={{ mb: 2 }}>
+              <Tab value="llm" label="⚙️ Настройки LLM" />
+              <Tab value="chats" label="💬 Чаты клиентов" />
+            </Tabs>
+
+            {section === 'chats' ? (
+              <ClientChatsPanel />
+            ) : (
+              <>
+                <LLMSettingsPanel
+                  settings={settings.settings}
+                  loading={loading}
+                  saved={saved}
+                  onSave={handleSaveSettings}
+                  onReset={resetSettings}
+                />
 
             <SearchSettingsPanel
               useTickets={searchSettings.use_tickets}
@@ -224,6 +236,8 @@ const AdminPage: React.FC = () => {
               loading={loading}
               onUpdateModels={updateModels}
             />
+              </>
+            )}
           </Box>
         ) : (
           <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
