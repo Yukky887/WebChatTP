@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Parts Ассистент",
+  "version": "0.1.0",
+  "description": "Ассистент техподдержки WebCheckDB в контексте открытой страницы: текст страницы и скриншоты — в чат",
+  "permissions": ["storage", "sidePanel", "activeTab", "scripting"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_title": "Ассистент техподдержки ( Parts )"
+  },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

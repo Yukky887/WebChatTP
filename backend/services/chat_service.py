@@ -65,6 +65,7 @@ async def process_chat(
     user_id: Optional[int] = None,  # ← ДОБАВЛЕНО
     attachments: Optional[List[str]] = None,
     use_web: bool = False,
+    page: Optional[dict] = None,
     allowed_collections: Optional[List[str]] = None,
     api_token_id: Optional[int] = None,
     db: Optional[AsyncSession] = None,
@@ -74,6 +75,9 @@ async def process_chat(
     `attachments` — data URI изображений; если есть — идёт в vision-режим
     (без выбора программы и без RAG-поиска).
     `use_web` — «Умный поиск»: добавляет в контекст сниппеты из интернета.
+    `page` — контекст страницы из браузерного расширения {url, title, text}:
+    добавляется в контекст первым источником [Страница 1]; без программы
+    (программа не выбрана) поиск не гоняется, ответ строится по странице.
     `allowed_collections` — скоупы API-токена (ограничение поиска по коллекциям).
     """
     has_images = bool(attachments)
@@ -137,8 +141,8 @@ async def process_chat(
                 db_session.id, make_session_title(stored_content)
             )
 
-    # ========== НЕТ ПРОГРАММЫ (только для текстовых сообщений) ==========
-    if not detected_program and not has_images:
+    # ========== НЕТ ПРОГРАММЫ (только для текстовых сообщений без страницы) ==========
+    if not detected_program and not has_images and not page:
         return {
             "session_id": session_id,
             "answer": "",
@@ -164,7 +168,30 @@ async def process_chat(
     context_text = ""
     web_results: List[Dict] = []
 
-    if not has_images:
+    # Контекст страницы из браузерного расширения — первым источником,
+    # чтобы номера в ответе ([Страница 1]) совпадали с панелью источников
+    if page and (page.get("text") or page.get("title") or page.get("url")):
+        page_body = (page.get("text") or "").strip()
+        if page_body:
+            page_title = page.get("title") or page.get("url", "") or "Страница"
+            line = (f"[Страница {src_num + 1}] {page_title}\n"
+                    f"источник: {page.get('url', '')}\n{page_body}")
+            if len(line) > remaining_ctx:
+                line = line[:remaining_ctx]
+            src_num += 1
+            context_parts.append("\n### 🌐 Страница, открытая у пользователя:\n")
+            context_parts.append(line)
+            remaining_ctx -= len(line)
+            sources.append({
+                "index": src_num,
+                "type": "page",
+                "title": page_title,
+                "url": page.get("url", ""),
+                "score": 0,
+                "content_length": len(page_body)
+            })
+
+    if not has_images and detected_program:
         print(f"🔍 [{detected_program}] Поиск: {message[:50]}...")
         search_results = await search_all(
             message, program=detected_program, db=db,
@@ -290,7 +317,12 @@ async def process_chat(
         context_text = "\n\n".join(context_parts)
 
 
-    program_name = "Parts.Intellect" if detected_program == "intellect" else "Parts.Resource"
+    if detected_program == "intellect":
+        program_name = "Parts.Intellect"
+    elif detected_program == "resource":
+        program_name = "Parts.Resource"
+    else:
+        program_name = "странице, открытой у пользователя"
     context_scope = (
         f"{program_name} + внутренние данные Bitrix24" if bitrix else program_name
     )
@@ -309,6 +341,7 @@ async def process_chat(
 5. Если данные из разных источников противоречат — доверяй более свежему (см. даты) и отмети противоречие
 6. Информация из интернета (🌐) — вспомогательная; упомяни, что это из интернета
 7. Отвечай по-русски, структурно и по делу: заголовки, списки, конкретные шаги. Без воды
+8. Если в контексте есть блок «Страница, открытая у пользователя» — это содержимое страницы, с которой задан вопрос. Отвечая про неё, опирайся на неё в первую очередь
 """
     
     if has_images:
@@ -324,6 +357,11 @@ async def process_chat(
 4. Если данных недостаточно - задай уточняющий вопрос.
 
 Отвечай по-русски, кратко и структурированно."""
+    if has_images and page:
+        system_prompt += (
+            f"\n\nСтраница, с которой отправлен скриншот: "
+            f"«{page.get('title', '') or 'без названия'}» ({page.get('url', '')})."
+        )
 
     # ========== ЗАПРОС К LLM ==========
     messages = [{"role": "system", "content": system_prompt}]

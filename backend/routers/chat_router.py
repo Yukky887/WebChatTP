@@ -19,6 +19,9 @@ router = APIRouter(prefix="/api", tags=["Клиент · чат"])
 MAX_ATTACHMENTS = 4
 MAX_ATTACHMENT_URI_LEN = 15_000_000  # base64 JPEG ~13.3 МБ нетто ≈ 10 МБ
 
+# Лимит читабельного текста страницы от расширения
+MAX_PAGE_TEXT = 12_000
+
 # Vision-модель: Google закрыл gemini-2.5-flash-lite для новых ключей (404),
 # поэтому дефолт — gemini-3.5-flash-lite; можно переопределить через VISION_MODEL
 VISION_MODEL = os.getenv("VISION_MODEL", "google/gemini-3.5-flash-lite")
@@ -50,6 +53,19 @@ async def chat(
         if len(uri) > MAX_ATTACHMENT_URI_LEN:
             raise HTTPException(400, "Изображение слишком большое (лимит ~10 МБ)")
 
+    # Контекст страницы (браузерное расширение): URL/заголовок/читабельный текст
+    page = None
+    if request.page is not None:
+        _ptext = (request.page.text or "").strip()
+        _purl = (request.page.url or "").strip()
+        _ptitle = (request.page.title or "").strip()
+        if _ptext or _purl or _ptitle:
+            page = {
+                "url": _purl[:2000],
+                "title": _ptitle[:500],
+                "text": _ptext[:MAX_PAGE_TEXT],
+            }
+
     # С картинками гоним через облачный vision
     if has_images:
         provider = "routerai"
@@ -75,6 +91,7 @@ async def chat(
         user_id=user.id if user else None,  # ← Привязка к юзеру
         attachments=attachments,
         use_web=request.use_web,
+        page=page,
         allowed_collections=api_token.scopes if api_token else None,
         api_token_id=api_token.id if api_token else None,
         db=db,

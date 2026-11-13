@@ -5,6 +5,12 @@ class SearchRequest(BaseModel):
     query: str
     limit: int = 15
 
+class PageContext(BaseModel):
+    """Контекст страницы из браузерного расширения (url/title/читабельный текст)."""
+    url: str = ""
+    title: str = ""
+    text: str = ""
+
 class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     message: str
@@ -18,6 +24,9 @@ class ChatRequest(BaseModel):
     # «Умный поиск»: дополнительно искать информацию в интернете
     # (работает для текстовых сообщений; для картинок игнорируется)
     use_web: bool = False
+    # Страница, с которой задан вопрос (браузерное расширение):
+    # добавляется в контекст первым источником [Страница 1]
+    page: Optional[PageContext] = None
 
 class UsageInfo(BaseModel):
     prompt_tokens: int = 0

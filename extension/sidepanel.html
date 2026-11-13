@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Ассистент техподдержки</title>
+<link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+<header>
+  <div class="brand">🐾 Ассистент техподдержки</div>
+  <button id="btnSettings" title="Настройки">⚙</button>
+</header>
+
+<section id="settings" class="hidden">
+  <label>Адрес бэкенда
+    <input id="inpBackend" type="text" placeholder="http://sup5.tradesoft.corp:8000">
+  </label>
+  <label>API-токен
+    <input id="inpToken" type="password" placeholder="токен из админки WebCheckDB">
+  </label>
+  <button id="btnSaveSettings" class="primary">Сохранить</button>
+  <div id="settingsMsg"></div>
+</section>
+
+<main id="chat"></main>
+
+<section id="attachBar" class="hidden">
+  <span id="pageChip" class="chip page"></span>
+  <span id="shotChip" class="chip shot"></span>
+</section>
+
+<footer>
+  <div class="actions">
+    <button id="btnPage" title="Добавить текст текущей страницы (или выделенный фрагмент)">📄 Страница</button>
+    <button id="btnShot" title="Скриншот видимой области страницы → в vision-модель">👁 Скриншот</button>
+  </div>
+  <div class="composer">
+    <textarea id="input" rows="2" placeholder="Вопрос по странице или базе знаний… (Enter — отправить)"></textarea>
+    <button id="btnSend" class="primary" title="Отправить">➤</button>
+  </div>
+</footer>
+
+<script type="module" src="sidepanel.js"></script>
+</body>
+</html>
