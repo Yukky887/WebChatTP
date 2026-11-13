@@ -259,11 +259,11 @@ class ChatRepository:
         result = await self.db.execute(
             select(Message)
             .where(Message.session_id.in_(session_ids))
+            .distinct(Message.session_id)  # PostgreSQL DISTINCT ON
             .order_by(
                 Message.session_id,
                 desc(Message.created_at), desc(Message.id),
             )
-            .distinct_on(Message.session_id)
         )
         return {m.session_id: m for m in result.scalars().all()}
 
