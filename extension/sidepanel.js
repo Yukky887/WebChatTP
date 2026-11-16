@@ -1,4 +1,6 @@
-/* Ассистент техподдержки — side panel: чат + контекст страницы + скриншоты */
+/* Ассистент техподдержки — side panel: чат + контекст страницы + скриншоты.
+   История чата привязана к API-токену и переживает переоткрытие панели;
+   ответы оператора (эскалация) подхватываются опросом /api/chat/updates. */
 import {
   LOADER_COLS, LOADER_ROWS, LOADER_FPS, LOADER_PAL, LOADER_FRAMES,
 } from './loaderFrames.js';
@@ -6,14 +8,25 @@ import {
 const $ = (id) => document.getElementById(id);
 const chatEl = $('chat'), inputEl = $('input'), attachBar = $('attachBar');
 const pageChip = $('pageChip'), shotChip = $('shotChip');
+const bannerEl = $('statusBanner');
 
 const DEFAULT_BACKEND = 'http://sup5.tradesoft.corp:8000';
 const MAX_PAGE_TEXT = 12000;
+const POLL_MS = 5000;
 
-let sessionId = null;
-let pageCtx = null;      // {url, title, text}
-let shotUri = null;      // data:image/jpeg;base64,...
+let sessionId = null;      // сессия чата (хранится в chrome.storage)
+let lastMsgId = 0;         // последнее полученное id сообщения (для after_id)
+let lastStatus = null;     // статус сессии с сервера
 let busy = false;
+let pageCtx = null;        // {url, title, text, selection}
+let shotUri = null;        // data:image/jpeg;base64,...
+
+// Дедупликация: сервер возвращает и свои сообщения; локально отрисованные
+// пропускаем по содержимому (lastLocalUser / lastLocalAssistant)
+const seenIds = new Set();
+let lastLocalUser = null;
+let lastLocalAssistant = null;
+let pollTimer = null;
 
 /* ---------- настройки ---------- */
 async function getSettings() {
@@ -22,6 +35,19 @@ async function getSettings() {
     backend: (s.backend || DEFAULT_BACKEND).replace(/\/+$/, ''),
     token: s.token || '',
   };
+}
+
+/* Сессия чата привязана к паре (бэкенд, токен): сменил токен — новый чат */
+async function restoreSession(s) {
+  const st = await chrome.storage.local.get(['chatSession']);
+  const cs = st.chatSession;
+  if (cs && cs.backend === s.backend && cs.token === s.token && cs.sessionId) {
+    sessionId = cs.sessionId;
+  }
+}
+function saveSession(s) {
+  if (!s) return;
+  chrome.storage.local.set({ chatSession: { backend: s.backend, token: s.token, sessionId } });
 }
 
 $('btnSettings').addEventListener('click', async () => {
@@ -35,13 +61,29 @@ $('btnSettings').addEventListener('click', async () => {
 });
 
 $('btnSaveSettings').addEventListener('click', async () => {
-  await chrome.storage.local.set({
+  const prev = await getSettings();
+  const next = {
     backend: $('inpBackend').value.trim() || DEFAULT_BACKEND,
     token: $('inpToken').value.trim(),
-  });
+  };
+  await chrome.storage.local.set(next);
+  if (prev.backend !== next.backend || prev.token !== next.token) {
+    resetChat(); // другой бэкенд/токен — старая сессия чужая
+  }
   $('settingsMsg').textContent = 'Сохранено ✓';
   setTimeout(() => { $('settings').classList.add('hidden'); }, 900);
 });
+
+function resetChat() {
+  sessionId = null;
+  lastMsgId = 0;
+  lastStatus = null;
+  seenIds.clear();
+  lastLocalUser = null;
+  lastLocalAssistant = null;
+  chatEl.innerHTML = '';
+  refreshBanner();
+}
 
 /* ---------- лоадер «Ассистент думает...» (ASCII-кот, кадры из loaderFrames.js) ---------- */
 function esc(s) {
@@ -142,12 +184,67 @@ function addAssistantMsg(answer, sources) {
   scrollBottom();
 }
 
+function addOperatorMsg(text) {
+  const div = document.createElement('div');
+  div.className = 'msg operator';
+  div.innerHTML = mdLite(text || '');
+  chatEl.appendChild(div);
+  scrollBottom();
+}
+
+function addNote(text) {
+  const div = document.createElement('div');
+  div.className = 'note';
+  div.textContent = text;
+  chatEl.appendChild(div);
+  scrollBottom();
+}
+
 function addErrorMsg(text) {
   const div = document.createElement('div');
   div.className = 'msg error';
   div.textContent = text;
   chatEl.appendChild(div);
   scrollBottom();
+}
+
+/* Сообщение с сервера (история/поллинг). Локально отрисованные свои
+   сообщения пропускаем (echo-дедупликация по содержимому). */
+function renderServerMessage(m) {
+  if (seenIds.has(m.id)) return;
+  const content = m.content || '';
+  if (m.role === 'user' && lastLocalUser && content.trim() === lastLocalUser) {
+    seenIds.add(m.id);
+    lastLocalUser = null;
+    if (m.id > lastMsgId) lastMsgId = m.id;
+    return;
+  }
+  if (m.role === 'assistant' && lastLocalAssistant && content === lastLocalAssistant) {
+    seenIds.add(m.id);
+    lastLocalAssistant = null;
+    if (m.id > lastMsgId) lastMsgId = m.id;
+    return;
+  }
+  seenIds.add(m.id);
+  if (m.role === 'user') addUserMsg(content);
+  else if (m.role === 'operator') addOperatorMsg(content);
+  else addAssistantMsg(content, m.sources);
+  if (m.id > lastMsgId) lastMsgId = m.id;
+}
+
+/* Плашка статуса эскалации над полем ввода */
+function refreshBanner() {
+  if (!sessionId || !lastStatus || lastStatus === 'active') {
+    bannerEl.classList.add('hidden');
+    bannerEl.textContent = '';
+    return;
+  }
+  bannerEl.classList.remove('hidden');
+  bannerEl.textContent = {
+    waiting_operator: '🔴 Ждём специалиста техподдержки…',
+    operator_active: '🧑‍💼 Специалист техподдержки отвечает',
+    closed: '✔ Диалог завершён — новый вопрос откроет его заново',
+  }[lastStatus] || '';
 }
 
 /* ---------- чипы вложений ---------- */
@@ -227,6 +324,56 @@ $('btnShot').addEventListener('click', async () => {
   }
 });
 
+/* ---------- история чата: догрузка при открытии панели ---------- */
+async function loadHistory(s) {
+  try {
+    const resp = await fetch(
+      `${s.backend}/api/chat/updates?session_id=${encodeURIComponent(sessionId)}&after_id=0`,
+      { headers: { 'X-API-Key': s.token } },
+    );
+    if (resp.status === 403 || resp.status === 404) {
+      // сессия чужая/удалена — начинаем новую
+      sessionId = null;
+      saveSession(s);
+      return;
+    }
+    if (!resp.ok) return;
+    const data = await resp.json();
+    lastStatus = data.session_status || null;
+    chatEl.innerHTML = '';
+    seenIds.clear();
+    lastMsgId = 0;
+    lastLocalUser = null;
+    lastLocalAssistant = null;
+    for (const m of data.messages || []) renderServerMessage(m);
+    refreshBanner();
+  } catch { /* бэкенд недоступен — начнём с пустой ленты */ }
+}
+
+/* ---------- поллинг обновлений: ответы оператора и статусы ---------- */
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(poll, POLL_MS);
+}
+
+async function poll() {
+  if (!sessionId || busy) return;
+  const s = await getSettings();
+  try {
+    const resp = await fetch(
+      `${s.backend}/api/chat/updates?session_id=${encodeURIComponent(sessionId)}&after_id=${lastMsgId}`,
+      { headers: { 'X-API-Key': s.token } },
+    );
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.session_status && data.session_status !== lastStatus) {
+      lastStatus = data.session_status;
+      refreshBanner();
+    }
+    for (const m of data.messages || []) renderServerMessage(m);
+  } catch { /* сеть пропала — молча, следующий тик повторит */ }
+}
+
 /* ---------- отправка ---------- */
 async function send() {
   if (busy) return;
@@ -252,6 +399,7 @@ async function send() {
   if (pageCtx) extras.push(pageCtx.selection ? '📄 выделение' : '📄 страница');
   if (shotUri) extras.push('👁 скриншот');
   addUserMsg(text, extras);
+  lastLocalUser = text.trim();
   inputEl.value = '';
   shotUri = null;
   refreshChips();
@@ -278,8 +426,23 @@ async function send() {
     }
     const data = await resp.json();
     sessionId = data.session_id || sessionId;
+    saveSession(s);
+    if (data.session_status) {
+      lastStatus = data.session_status;
+      refreshBanner();
+    }
     stopLoader(loader);
-    addAssistantMsg(data.answer, data.sources);
+    if (data.operator_called) {
+      // флаг call_operator: бот поставлен на паузу — это статус, а не ответ
+      addNote('✅ Специалист техподдержки вызван — ждём подключения.');
+    } else if (data.session_status === 'waiting_operator' || data.session_status === 'operator_active') {
+      addNote('⏳ Специалист техподдержки на линии — сообщение передано.');
+    } else {
+      lastLocalAssistant = data.answer || '';
+      addAssistantMsg(data.answer, data.sources);
+    }
+    // оператор мог ответить, пока грузился ответ бота — забрать сразу
+    setTimeout(poll, 800);
   } catch (e) {
     stopLoader(loader);
     addErrorMsg(`⚠ ${e.message || e}`);
@@ -297,4 +460,11 @@ inputEl.addEventListener('keydown', (e) => {
   }
 });
 
-refreshChips();
+/* ---------- старт: настройки → сессия → история → поллинг ---------- */
+(async () => {
+  const s = await getSettings();
+  await restoreSession(s);
+  refreshChips();
+  if (sessionId) await loadHistory(s);
+  startPolling();
+})();

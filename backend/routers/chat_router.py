@@ -3,12 +3,13 @@ import os
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
+from uuid import UUID
 
 from models import ChatRequest, ChatResponse
 from services.chat_service import process_chat
 from services.state import state
 from db.session import get_db
-from db.repositories import ProviderRepository
+from db.repositories import ProviderRepository, ChatRepository
 from db.models import User, ApiToken
 from dependencies.auth import get_current_user, get_api_token
 
@@ -98,3 +99,69 @@ async def chat(
         db=db,
     )
     return ChatResponse(**result)
+
+
+@router.get("/chat/updates")
+async def chat_updates(
+    session_id: str,
+    after_id: int = 0,
+    user: Optional[User] = Depends(get_current_user),
+    api_token: Optional[ApiToken] = Depends(get_api_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Лента обновлений чата для клиента: новые сообщения (в т.ч. ответы
+    оператора при эскалации) и текущий статус сессии.
+
+    Клиент опрашивает её периодически (расширение — раз в ~5 с) с after_id
+    последнего полученного сообщения; after_id=0 отдаёт всю переписку.
+
+    Доступ: владелец-юзер, токен-владелец; гость — только ничейные сессии.
+    """
+    # Принципал как в /chat: пользовательский JWT > API-токен > гость
+    if user is not None:
+        api_token = None
+
+    repo = ChatRepository(db)
+    try:
+        sid = UUID(session_id)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "Некорректный session_id")
+
+    session = await repo.get_session(sid)
+    if not session:
+        raise HTTPException(404, "Сессия не найдена")
+
+    if user is not None:
+        if session.user_id is not None and session.user_id != user.id:
+            raise HTTPException(403, "Нет доступа к этой сессии")
+    elif api_token is not None:
+        if session.api_token_id != api_token.id:
+            raise HTTPException(403, "Нет доступа к этой сессии")
+    elif session.user_id is not None or session.api_token_id is not None:
+        # гость: только сессии без владельца
+        raise HTTPException(403, "Нет доступа к этой сессии")
+
+    messages = await repo.get_messages_after(sid, max(after_id, 0))
+    srcs = await repo.sources_for_messages([m.id for m in messages])
+    return {
+        "session_id": str(sid),
+        "session_status": session.status or "active",
+        "messages": [
+            {
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+                "sources": [
+                    {
+                        "index": s.source_index,
+                        "type": s.source_type,
+                        "title": s.source_title,
+                        "url": s.source_url,
+                    }
+                    for s in (srcs.get(m.id) or [])
+                ],
+            }
+            for m in messages
+        ],
+    }

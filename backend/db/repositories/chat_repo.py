@@ -79,6 +79,34 @@ class ChatRepository:
 
         return await self.create_session(session_id=session_id, **kwargs)
 
+    async def get_last_session_for_token(self, api_token_id: int) -> Optional[ChatSession]:
+        """Последняя (свежая) сессия API-токена — режим «один чат на клиента».
+
+        Клиент с токеном (домен/IP) не должен плодить новый чат на каждый
+        вопрос: без session_id продолжается последняя сессия токена,
+        вся переписка живёт в одном чате (виден в админке). Закрытая сессия
+        переоткрывается в process_chat при новом вопросе."""
+        result = await self.db.execute(
+            select(ChatSession)
+            .where(ChatSession.api_token_id == api_token_id)
+            .order_by(desc(ChatSession.updated_at), desc(ChatSession.created_at))
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_messages_after(
+        self, session_id: UUID, after_id: int = 0, limit: int = 200,
+    ) -> List[Message]:
+        """Сообщения сессии с id > after_id (хронологически) — лента обновлений
+        для клиента (расширение опрашивает раз в несколько секунд)."""
+        result = await self.db.execute(
+            select(Message)
+            .where(Message.session_id == session_id, Message.id > after_id)
+            .order_by(asc(Message.id))
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def add_message(
         self,
         session_id: UUID,

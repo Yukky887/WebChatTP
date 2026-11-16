@@ -97,6 +97,12 @@ async def process_chat(
     # Создаём или получаем сессию в БД
     db_session = None
     if chat_repo:
+        if parsed_session_id is None and api_token_id is not None:
+            # «Один чат на клиента»: у API-токена без session_id продолжаем
+            # последнюю его сессию — вся переписка клиента в одном чате
+            last = await chat_repo.get_last_session_for_token(api_token_id)
+            if last is not None:
+                parsed_session_id = last.id
         db_session = await chat_repo.get_or_create_session(
             session_id=parsed_session_id,
             user_id=user_id,
