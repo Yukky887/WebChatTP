@@ -122,6 +122,20 @@ main {
 }
 #statusBanner.hidden { display: none; }
 
+/* Выбор программы (когда классификатор не понял вопрос) */
+.programs { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+.program-chip {
+  border: 1px solid var(--accent);
+  background: var(--panel);
+  color: var(--accent);
+  border-radius: 16px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.program-chip:hover { background: var(--accent); color: #fff; }
+
 .sources {
   align-self: flex-start;
   max-width: 92%;

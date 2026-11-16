@@ -205,21 +205,29 @@ async def process_chat(
 
     # ========== НЕТ ПРОГРАММЫ (только для текстовых сообщений без страницы) ==========
     if not detected_program and not has_images and not page:
-        return {
-            "session_id": session_id,
-            "answer": "",
-            "has_questions": True,
-            "suggestions": ["Parts.Intellect", "Parts.Resource"],
-            "sources": [],
-            "provider": provider,
-            "model": model,
-            "truncated": False,
-            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0},
-            "program": None,
-            "needs_program_selection": True,
-            "operator_called": False,
-            "session_status": (db_session.status or 'active') if db_session else None,
-        }
+        # Клиент не указал программу, классификатор не помог: если в этой
+        # сессии уже говорили о какой-то программе — продолжаем в ней
+        # (переоткрытый после close чат тоже продолжает свою программу),
+        # иначе просим выбрать (needs_program_selection → чипы в UI)
+        if chat_repo and db_session and db_session.selected_program:
+            detected_program = db_session.selected_program
+            print(f"↩ Программа не указана — продолжаем в {detected_program} (из сессии)")
+        else:
+            return {
+                "session_id": session_id,
+                "answer": "",
+                "has_questions": True,
+                "suggestions": ["Parts.Intellect", "Parts.Resource"],
+                "sources": [],
+                "provider": provider,
+                "model": model,
+                "truncated": False,
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0},
+                "program": None,
+                "needs_program_selection": True,
+                "operator_called": False,
+                "session_status": (db_session.status or 'active') if db_session else None,
+            }
     
     # Обновляем программу в сессии
     if chat_repo and db_session and detected_program:

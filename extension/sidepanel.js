@@ -375,11 +375,8 @@ async function poll() {
 }
 
 /* ---------- отправка ---------- */
-async function send() {
-  if (busy) return;
-  const text = inputEl.value.trim();
-  if (!text && !pageCtx && !shotUri) return;
-
+async function doSend(message, opts = {}) {
+  const text = (message || '').trim();
   const s = await getSettings();
   if (!s.token) {
     $('settings').classList.remove('hidden');
@@ -387,19 +384,18 @@ async function send() {
     return;
   }
 
-  const message = text
-    || (shotUri ? 'Извлеки текст со скриншота и подскажи, что делать.' : 'Проанализируй страницу и кратко ответь, что на ней важно.');
-
-  const body = { message };
+  const body = { message: text };
   if (sessionId) body.session_id = sessionId;
+  if (opts.program) body.program = opts.program;
   if (pageCtx) body.page = { url: pageCtx.url, title: pageCtx.title, text: pageCtx.text };
   if (shotUri) body.attachments = [shotUri];
 
   const extras = [];
+  if (opts.program) extras.push(`⚙ ${opts.program}`);
   if (pageCtx) extras.push(pageCtx.selection ? '📄 выделение' : '📄 страница');
   if (shotUri) extras.push('👁 скриншот');
   addUserMsg(text, extras);
-  lastLocalUser = text.trim();
+  lastLocalUser = text;
   inputEl.value = '';
   shotUri = null;
   refreshChips();
@@ -437,6 +433,10 @@ async function send() {
       addNote('✅ Специалист техподдержки вызван — ждём подключения.');
     } else if (data.session_status === 'waiting_operator' || data.session_status === 'operator_active') {
       addNote('⏳ Специалист техподдержки на линии — сообщение передано.');
+    } else if (data.needs_program_selection) {
+      // бэкенд не понял, о какой программе речь, — даём выбрать чипами;
+      // выбранный вопрос уйдёт повторно уже с program
+      addProgramPicker(data.suggestions || ['Parts.Intellect', 'Parts.Resource'], text);
     } else {
       lastLocalAssistant = data.answer || '';
       addAssistantMsg(data.answer, data.sources);
@@ -450,6 +450,36 @@ async function send() {
     busy = false;
     $('btnSend').disabled = false;
   }
+}
+
+/* Пикер программы: кликабельные чипы вместо пустого ответа бэкенда */
+function addProgramPicker(suggestions, originalMessage) {
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  const label = document.createElement('div');
+  label.textContent = 'О какой программе вопрос?';
+  div.appendChild(label);
+  const row = document.createElement('div');
+  row.className = 'programs';
+  for (const name of suggestions) {
+    const b = document.createElement('button');
+    b.className = 'program-chip';
+    b.textContent = name;
+    b.onclick = () => {
+      div.remove();
+      if (!busy) doSend(originalMessage, { program: name });
+    };
+    row.appendChild(b);
+  }
+  div.appendChild(row);
+  chatEl.appendChild(div);
+  scrollBottom();
+}
+
+function send() {
+  const text = inputEl.value.trim();
+  if (!text && !pageCtx && !shotUri) return;
+  doSend(text || (shotUri ? 'Извлеки текст со скриншота и подскажи, что делать.' : 'Проанализируй страницу и кратко ответь, что на ней важно.'));
 }
 
 $('btnSend').addEventListener('click', send);
