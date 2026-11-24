@@ -137,11 +137,19 @@ async def process_chat(
     if not session_id:
         session_id = str(uuid4())
     
-    # Загружаем историю из БД
+    # Загружаем историю из БД. Google/RouterAI понимают только user/assistant,
+    # а в сессиях после эскалации есть role='operator' — без маппинга провайдер
+    # отвечал 200 с ошибкой "Role 'operator' is not supported" и клиент видел
+    # «Не удалось получить ответ от модели».
     history = []
     if chat_repo and db_session:
         messages = await chat_repo.get_session_messages(db_session.id, limit=10)
-        history = [{"role": m.role, "content": m.content} for m in messages]
+        for m in messages:
+            role = 'user' if m.role == 'user' else 'assistant'
+            content = m.content
+            if m.role == 'operator':
+                content = f"Специалист техподдержки: {content}"
+            history.append({"role": role, "content": content})
     
     # ========== ОПРЕДЕЛЯЕМ ПРОГРАММУ ==========
     if has_images:

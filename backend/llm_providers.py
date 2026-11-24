@@ -99,9 +99,13 @@ async def _ollama_chat(client, model, messages, settings, max_tokens_limit=None)
 
 
 async def _openai_chat(client, model, messages, settings, provider_id: str, max_tokens_limit=None) -> Dict:
+    # Защита на уровне провайдера: Google/RouterAI принимают только user/assistant
     payload = {
         "model": model,
-        "messages": messages,
+        "messages": [
+            {**m, "role": "user" if m.get("role") == "user" else "assistant"}
+            for m in messages
+        ],
         "temperature": float(settings.temperature),
         "max_tokens": int(max_tokens_limit) if max_tokens_limit else settings.max_tokens,
         "top_p": float(settings.top_p),
