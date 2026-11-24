@@ -8,9 +8,9 @@ import {
 const $ = (id) => document.getElementById(id);
 const chatEl = $('chat'), inputEl = $('input'), attachBar = $('attachBar');
 const pageChip = $('pageChip'), shotChip = $('shotChip');
-const bannerEl = $('statusBanner');
+const bannerEl = $('statusBanner'), btnCall = $('btnCallOperator');
 
-const DEFAULT_BACKEND = 'http://sup5.tradesoft.corp:8000';
+const DEFAULT_BACKEND = 'http://sup5.tradesoft.corp:8100';
 const MAX_PAGE_TEXT = 12000;
 const POLL_MS = 5000;
 
@@ -113,7 +113,9 @@ function frameHTML(idx) {
   return out;
 }
 const loaderFrames = LOADER_FRAMES.map((_, i) => frameHTML(i));
-let loaderTimer = null;
+let loaderTimer = null;   // анимация кадров
+let loaderDelay = null;   // отложенный запуск
+let currentLoader = null;
 
 function startLoader() {
   const pre = document.createElement('pre');
@@ -130,7 +132,24 @@ function startLoader() {
 }
 function stopLoader(el) {
   if (loaderTimer) { clearInterval(loaderTimer); loaderTimer = null; }
-  el.remove();
+  if (el) el.remove();
+}
+/* Лоадер показываем не сразу: в чате со специалистом бэкенд отвечает
+   мгновенно, и «ASCII-кот» успевал мелькнуть на долю секунды. */
+function scheduleLoader(delay = 700) {
+  cancelLoader();
+  loaderDelay = setTimeout(() => {
+    loaderDelay = null;
+    currentLoader = startLoader();
+  }, delay);
+}
+function cancelLoader() {
+  if (loaderDelay) { clearTimeout(loaderDelay); loaderDelay = null; }
+  if (currentLoader) { stopLoader(currentLoader); currentLoader = null; }
+}
+/* Признак «чат ведёт специалист» — лоадер и ответы бота в нём не нужны */
+function isEscalated(status = lastStatus) {
+  return status === 'waiting_operator' || status === 'operator_active';
 }
 
 /* ---------- рендер сообщений ---------- */
@@ -234,6 +253,8 @@ function renderServerMessage(m) {
 
 /* Плашка статуса эскалации над полем ввода */
 function refreshBanner() {
+  // кнопку вызова прячем, когда специалист уже вызван/подключился
+  btnCall.classList.toggle('hidden', isEscalated() || lastStatus === 'closed');
   if (!sessionId || !lastStatus || lastStatus === 'active') {
     bannerEl.classList.add('hidden');
     bannerEl.textContent = '';
@@ -387,6 +408,7 @@ async function doSend(message, opts = {}) {
   const body = { message: text };
   if (sessionId) body.session_id = sessionId;
   if (opts.program) body.program = opts.program;
+  if (opts.callOperator) body.call_operator = true;
   if (pageCtx) body.page = { url: pageCtx.url, title: pageCtx.title, text: pageCtx.text };
   if (shotUri) body.attachments = [shotUri];
 
@@ -399,9 +421,12 @@ async function doSend(message, opts = {}) {
   inputEl.value = '';
   shotUri = null;
   refreshChips();
+  // В переписке со специалистом (и при вызове) лоадер не нужен вообще
+  const humanChat = isEscalated() || Boolean(opts.callOperator);
   busy = true;
   $('btnSend').disabled = true;
-  const loader = startLoader();
+  btnCall.disabled = true;
+  if (!humanChat) scheduleLoader();
 
   try {
     const resp = await fetch(`${s.backend}/api/chat`, {
@@ -427,11 +452,11 @@ async function doSend(message, opts = {}) {
       lastStatus = data.session_status;
       refreshBanner();
     }
-    stopLoader(loader);
+    cancelLoader();
     if (data.operator_called) {
       // флаг call_operator: бот поставлен на паузу — это статус, а не ответ
       addNote('✅ Специалист техподдержки вызван — ждём подключения.');
-    } else if (data.session_status === 'waiting_operator' || data.session_status === 'operator_active') {
+    } else if (isEscalated(data.session_status)) {
       addNote('⏳ Специалист техподдержки на линии — сообщение передано.');
     } else if (data.needs_program_selection) {
       // бэкенд не понял, о какой программе речь, — даём выбрать чипами;
@@ -444,11 +469,13 @@ async function doSend(message, opts = {}) {
     // оператор мог ответить, пока грузился ответ бота — забрать сразу
     setTimeout(poll, 800);
   } catch (e) {
-    stopLoader(loader);
+    cancelLoader();
     addErrorMsg(`⚠ ${e.message || e}`);
   } finally {
     busy = false;
     $('btnSend').disabled = false;
+    btnCall.disabled = false;
+    refreshBanner();
   }
 }
 
@@ -483,6 +510,14 @@ function send() {
 }
 
 $('btnSend').addEventListener('click', send);
+
+/* Кнопка «Позвать специалиста»: тот же флаг call_operator, что и в админке,
+   бэкенд сам переводит сессию в waiting_operator и ставит бота на паузу. */
+btnCall.addEventListener('click', () => {
+  if (busy || isEscalated()) return;
+  doSend('Позвать специалиста техподдержки', { callOperator: true });
+});
+
 inputEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
