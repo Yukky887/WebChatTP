@@ -94,6 +94,51 @@ const TranscriptMsg: React.FC<{ m: ClientChatMessage }> = ({ m }) => {
         }}
       >
         {m.content}
+        {/* Контекст из расширения: по какому разделу был вопрос клиента */}
+        {m.context?.page && (
+          <Box sx={{
+            mt: m.content ? 0.8 : 0, pt: 0.6, whiteSpace: 'normal',
+            borderTop: '1px solid', borderColor: isUser ? 'rgba(255,255,255,.3)' : 'divider',
+          }}>
+            {m.context.page.url ? (
+              <a
+                href={m.context.page.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: isUser ? '#cfe0ff' : '#1976d2', fontSize: 12 }}
+              >
+                🌐 {m.context.page.title || m.context.page.url}
+              </a>
+            ) : (
+              <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                🌐 {m.context.page.title || 'Страница без адреса'}
+              </Typography>
+            )}
+            {m.context.page.text && (
+              <Typography variant="caption" sx={{ display: 'block', opacity: 0.75, mt: 0.3 }}>
+                {m.context.page.text.slice(0, 300)}
+              </Typography>
+            )}
+          </Box>
+        )}
+        {!!m.context?.attachments?.length && (
+          <Box sx={{ display: 'flex', gap: 0.5, mt: 0.6, flexWrap: 'wrap' }}>
+            {m.context.attachments.map((src, i) => (
+              <Box
+                key={i}
+                component="img"
+                src={src}
+                alt="скриншот клиента"
+                title="Открыть скриншот"
+                onClick={() => window.open(src, '_blank')}
+                sx={{
+                  width: 110, height: 80, objectFit: 'cover', borderRadius: 1,
+                  cursor: 'zoom-in', border: '1px solid rgba(255,255,255,.4)', bgcolor: 'white',
+                }}
+              />
+            ))}
+          </Box>
+        )}
         {m.sources?.length > 0 && (
           <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.75 }}>
             📎 {m.sources.map((s) => s.title || s.type).filter(Boolean).slice(0, 5).join(', ')}

@@ -115,6 +115,7 @@ class ChatRepository:
         program_id: Optional[str] = None,
         sources: Optional[List[dict]] = None,
         usage: Optional[dict] = None,
+        context: Optional[dict] = None,
     ) -> Message:
         """Добавляет сообщение в сессию"""
         message = Message(
@@ -122,6 +123,7 @@ class ChatRepository:
             role=role,
             content=content,
             program_id=program_id,
+            context=context,
         )
         self.db.add(message)
         await self.db.flush()  # Чтобы получить message.id

@@ -195,6 +195,9 @@ class Message(Base):
     session_id = Column(UUID(as_uuid=True), ForeignKey('chat_sessions.id', ondelete='CASCADE'), nullable=False, index=True)
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
+    # Контекст из расширения: открытая страница и превью вложений.
+    # Хранится JSONB, чтобы оператор видел, на каком разделе у клиента вопрос.
+    context = Column(JSONB, nullable=True)
     program_id = Column(String(50), ForeignKey('programs.id'))
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     

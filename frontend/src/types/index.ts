@@ -262,11 +262,23 @@ export interface ClientChatSource {
   score: number | null;
 }
 
+/** Контекст, который клиент передал из расширения вместе с вопросом */
+export interface ClientMessageContext {
+  page?: {
+    url: string;
+    title: string;
+    text: string;
+  } | null;
+  /** уменьшенные data URI скриншотов (превью) */
+  attachments?: string[];
+}
+
 export interface ClientChatMessage {
   id: number;
   role: 'user' | 'assistant' | 'operator';
   content: string;
   program_id: string | null;
+  context: ClientMessageContext | null;
   created_at: string | null;
   sources: ClientChatSource[];
   usage: {

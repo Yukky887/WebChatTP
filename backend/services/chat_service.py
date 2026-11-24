@@ -1,12 +1,30 @@
+import base64
+import io
 from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
+from PIL import Image
 
 from services.search_service import search_all
 from services.web_search import web_search
 from llm_providers import chat_completion
 from db.repositories import ChatRepository
 from db.repositories import ProviderRepository
+
+
+def _thumb_data_uri(data_uri: str, max_side: int = 320) -> Optional[str]:
+    """Уменьшить скриншот до превью для админки (не полный data URI на 10 МБ)."""
+    try:
+        if not data_uri.startswith('data:image/'):
+            return None
+        raw = base64.b64decode(data_uri.split(',', 1)[1])
+        im = Image.open(io.BytesIO(raw)).convert('RGB')
+        im.thumbnail((max_side, max_side))
+        buf = io.BytesIO()
+        im.save(buf, format='JPEG', quality=65, optimize=True)
+        return 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return None
 
 
 class QuestionClassifier:
@@ -137,12 +155,28 @@ async def process_chat(
     # Что сохранить в историю (текст; картинка живёт только в этом сообщении)
     stored_content = (message or "").strip() or "📎 [изображение]"
 
+    # Контекст для оператора: страница/выделение + превью вложений.
+    # Полные скриншоты в БД не кладём — только уменьшенные копии.
+    msg_context = None
+    if page or attachments:
+        msg_context = {}
+        if page and (page.get('url') or page.get('title') or page.get('text')):
+            msg_context['page'] = {
+                'url': (page.get('url') or '')[:2000],
+                'title': (page.get('title') or '')[:500],
+                'text': (page.get('text') or '').strip()[:3000],
+            }
+        thumbs = [t for t in (_thumb_data_uri(u) for u in (attachments or [])) if t]
+        if thumbs:
+            msg_context['attachments'] = thumbs
+
     # Сохраняем вопрос в БД
     if chat_repo and db_session:
         await chat_repo.add_message(
             session_id=db_session.id,
             role="user",
             content=stored_content,
+            context=msg_context,
         )
         # Название чата — по первому вопросу (учитываем и текст из image-only сообщений)
         if not db_session.title:

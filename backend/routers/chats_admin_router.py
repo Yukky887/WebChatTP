@@ -54,6 +54,8 @@ def _message_brief(m, sources=None, usage=None) -> dict:
         "role": m.role,
         "content": m.content,
         "program_id": m.program_id,
+        # контекст расширения: страница + превью скриншотов (для оператора)
+        "context": m.context,
         "created_at": m.created_at.isoformat() if m.created_at else None,
         "sources": [
             {
