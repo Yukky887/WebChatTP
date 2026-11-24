@@ -12,16 +12,16 @@ from db.repositories import ChatRepository
 from db.repositories import ProviderRepository
 
 
-def _thumb_data_uri(data_uri: str, max_side: int = 320) -> Optional[str]:
-    """Уменьшить скриншот до превью для админки (не полный data URI на 10 МБ)."""
+def _resize_data_uri(data_uri: str, max_side: int = 320, quality: int = 65) -> Optional[str]:
+    """Сжать data URI: миниатюра для списка и крупная копия для просмотра."""
     try:
         if not data_uri.startswith('data:image/'):
             return None
         raw = base64.b64decode(data_uri.split(',', 1)[1])
         im = Image.open(io.BytesIO(raw)).convert('RGB')
-        im.thumbnail((max_side, max_side))
+        im.thumbnail((max_side, max_side))  # не увеличивает маленькие картинки
         buf = io.BytesIO()
-        im.save(buf, format='JPEG', quality=65, optimize=True)
+        im.save(buf, format='JPEG', quality=quality, optimize=True)
         return 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()
     except Exception:
         return None
@@ -166,9 +166,14 @@ async def process_chat(
                 'title': (page.get('title') or '')[:500],
                 'text': (page.get('text') or '').strip()[:3000],
             }
-        thumbs = [t for t in (_thumb_data_uri(u) for u in (attachments or [])) if t]
+        # attachments — мелкие миниатюры для ленты, screenshots — читаемая копия
+        # для открытия по клику (админка показывала 320px, на ней ничего не видно).
+        thumbs = [t for t in (_resize_data_uri(u, 320, 65) for u in (attachments or [])) if t]
         if thumbs:
             msg_context['attachments'] = thumbs
+        large = [t for t in (_resize_data_uri(u, 1600, 82) for u in (attachments or [])) if t]
+        if large:
+            msg_context['screenshots'] = large
 
     # Сохраняем вопрос в БД
     if chat_repo and db_session:

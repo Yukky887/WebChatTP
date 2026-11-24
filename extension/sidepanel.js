@@ -314,12 +314,38 @@ $('btnPage').addEventListener('click', async () => {
       const res = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         allFrames: true,   // admin-панели часто целиком в iframe
-        func: () => ({
-          url: location.href,
-          title: document.title,
-          selection: window.getSelection ? String(window.getSelection()) : '',
-          text: document.body ? (document.body.innerText || document.body.textContent || '') : '',
-        }),
+        func: () => {
+          // innerText пустой бывает и не только на chrome://: контент в iframe,
+          // shadow DOM или страница, собранная из text-нодов без body.innerText.
+          const visible = (root) => {
+            const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+              acceptNode(n) {
+                const p = n.parentElement;
+                if (!p || p.closest('script,style,noscript,svg')) return NodeFilter.FILTER_REJECT;
+                return n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+              },
+            });
+            const out = [];
+            while (w.nextNode()) out.push(w.currentNode.nodeValue.trim());
+            return out.join(' ');
+          };
+          let text = document.body ? (document.body.innerText || '').trim() : '';
+          if (!text) {
+            text = visible(document.body || document.documentElement);
+            document.querySelectorAll('*').forEach((el) => {
+              if (el.shadowRoot) {
+                const s = visible(el.shadowRoot);
+                if (s) text += (text ? '\n' : '') + s;
+              }
+            });
+          }
+          return {
+            url: location.href,
+            title: document.title,
+            selection: window.getSelection ? String(window.getSelection()) : '',
+            text,
+          };
+        },
       });
       frames = (res || [])
         .filter((r) => r?.result && !r.error)
@@ -346,9 +372,12 @@ $('btnPage').addEventListener('click', async () => {
     pageCtx = { url, title, text: body, selection: Boolean(selected) };
     refreshChips();
     if (!body) {
+      const diag = frames.length
+        ? `фреймов с текстом: ${frames.length}`
+        : (readError ? `ошибка чтения: ${readError}` : 'текстовые ноды не найдены');
       addNote(SERVICE_URL_RE.test(url)
         ? `📄 Приложены адрес и заголовок служебной страницы (текст недоступен): ${url}`
-        : `📄 Текст не найден (страница в iframe или требует входа) — приложены адрес и заголовок: ${url}`);
+        : `📄 Текст не найден (${diag}) — приложены адрес и заголовок: ${url}`);
     }
     return;
   }

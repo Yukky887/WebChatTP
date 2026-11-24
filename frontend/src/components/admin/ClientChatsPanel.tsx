@@ -130,7 +130,7 @@ const TranscriptMsg: React.FC<{ m: ClientChatMessage; onPreview: (src: string) =
                 src={src}
                 alt="скриншот клиента"
                 title="Открыть скриншот"
-                onClick={() => onPreview(src)}
+                onClick={() => onPreview(m.context?.screenshots?.[i] || src)}
                 sx={{
                   width: 110, height: 80, objectFit: 'cover', borderRadius: 1,
                   cursor: 'zoom-in', border: '1px solid rgba(255,255,255,.4)', bgcolor: 'white',

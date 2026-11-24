@@ -269,8 +269,10 @@ export interface ClientMessageContext {
     title: string;
     text: string;
   } | null;
-  /** уменьшенные data URI скриншотов (превью) */
+  /** уменьшенные data URI скриншотов (превью 320px) */
   attachments?: string[];
+  /** читаемые копии скриншотов (до 1600px) для просмотра по клику */
+  screenshots?: string[];
 }
 
 export interface ClientChatMessage {
