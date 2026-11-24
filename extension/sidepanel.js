@@ -13,6 +13,8 @@ const bannerEl = $('statusBanner'), btnCall = $('btnCallOperator');
 const DEFAULT_BACKEND = 'http://sup5.tradesoft.corp:8100';
 const MAX_PAGE_TEXT = 12000;
 const POLL_MS = 5000;
+// служебные страницы: контент-скрипт туда не внедрить, но адрес/заголовок взять можно
+const SERVICE_URL_RE = /^(chrome|edge|about|devtools|chrome-extension|view-source|moz-extension):/i;
 
 let sessionId = null;      // сессия чата (хранится в chrome.storage)
 let lastMsgId = 0;         // последнее полученное id сообщения (для after_id)
@@ -294,34 +296,63 @@ async function activeTab() {
   return tab;
 }
 
-/* ---------- «📄 Страница»: читабельный текст или выделение ---------- */
+/* ---------- «📄 Страница»: текст, выделение или хотя бы адрес/заголовок ---------- */
 $('btnPage').addEventListener('click', async () => {
-  try {
-    const tab = await activeTab();
-    if (!tab?.id) throw new Error('Нет активной вкладки');
-    const [res] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => ({
-        url: location.href,
-        title: document.title,
-        selection: window.getSelection ? String(window.getSelection()) : '',
-        text: document.body ? document.body.innerText : '',
-      }),
-    });
-    const info = res?.result;
-    if (!info) throw new Error('Не удалось прочитать страницу');
-    const body = (info.selection || info.text || '').trim().slice(0, MAX_PAGE_TEXT);
-    if (!body) throw new Error('На странице нет текста');
-    pageCtx = {
-      url: info.url || '',
-      title: info.title || '',
-      text: body,
-      selection: Boolean(info.selection),
-    };
-    refreshChips();
-  } catch (e) {
-    addErrorMsg(`📄 ${e.message || e}\n(на служебных страницах chrome:// текст взять нельзя)`);
+  const tab = await activeTab().catch(() => null);
+  if (!tab?.id) {
+    addErrorMsg('📄 Нет активной вкладки');
+    return;
   }
+  const tabUrl = tab.url || '';
+  const tabTitle = tab.title || '';
+  let frames = [];
+  let readError = '';
+
+  // На служебных страницах внедрение невозможно — работаем с tab.url/tab.title.
+  if (!SERVICE_URL_RE.test(tabUrl)) {
+    try {
+      const res = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        allFrames: true,   // admin-панели часто целиком в iframe
+        func: () => ({
+          url: location.href,
+          title: document.title,
+          selection: window.getSelection ? String(window.getSelection()) : '',
+          text: document.body ? (document.body.innerText || document.body.textContent || '') : '',
+        }),
+      });
+      frames = (res || [])
+        .filter((r) => r?.result && !r.error)
+        .map((r) => ({ ...r.result, text: (r.result.text || '').trim() }))
+        .filter((f) => f.text || (f.selection || '').trim());
+    } catch (e) {
+      readError = e.message || String(e);
+    }
+  }
+
+  // Сначала выделение, затем самый «содержательный» фрейм; текст фреймов не дублируем.
+  const selected = frames.find((f) => (f.selection || '').trim());
+  const best = selected ||
+    frames.slice().sort((a, b) => b.text.length - a.text.length)[0] || {};
+  const body = (selected
+    ? selected.selection
+    : [...new Set(frames.map((f) => f.text).filter((t) => t.length > 20))].join('\n')
+  ).trim().slice(0, MAX_PAGE_TEXT);
+  const url = (best.url && !/^about:blank$/.test(best.url)) ? best.url : tabUrl;
+  const title = best.title || tabTitle;
+
+  if (body || url || title) {
+    // Даже без текста специалисту важен сам адрес раздела.
+    pageCtx = { url, title, text: body, selection: Boolean(selected) };
+    refreshChips();
+    if (!body) {
+      addNote(SERVICE_URL_RE.test(url)
+        ? `📄 Приложены адрес и заголовок служебной страницы (текст недоступен): ${url}`
+        : `📄 Текст не найден (страница в iframe или требует входа) — приложены адрес и заголовок: ${url}`);
+    }
+    return;
+  }
+  addErrorMsg(`📄 Не удалось прочитать страницу${readError ? `: ${readError}` : ''}`);
 });
 
 /* ---------- «👁 Скриншот»: видимая область → vision-модель ---------- */
@@ -329,7 +360,7 @@ $('btnShot').addEventListener('click', async () => {
   try {
     const tab = await activeTab();
     if (!tab?.windowId) throw new Error('Нет активной вкладки');
-    if (/^(chrome|edge|about|devtools|chrome-extension|view-source):/.test(tab.url || '')) {
+    if (SERVICE_URL_RE.test(tab.url || '')) {
       throw new Error('Скриншот нельзя сделать на служебной странице (chrome:// и т.п.)');
     }
     shotUri = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 80 });
