@@ -491,18 +491,27 @@ async def process_chat(
     if not provider_db:
         raise Exception(f"Провайдер {provider} не найден")
 
-    result = await chat_completion(
-        provider_id=provider_db.id,
-        base_url=provider_db.base_url,
-        api_type=provider_db.api_type,
-        api_key=provider_db.api_key_encrypted or "",
-        model=model,
-        messages=messages,
-        max_tokens_limit=1500 if has_images else None,  # vision-ответы не длиннее ~1500 токенов
-        db=db,
-    )
-    answer = result["content"]
-    usage = result.get("usage", {})
+    llm_failed = False
+    try:
+        result = await chat_completion(
+            provider_id=provider_db.id,
+            base_url=provider_db.base_url,
+            api_type=provider_db.api_type,
+            api_key=provider_db.api_key_encrypted or "",
+            model=model,
+            messages=messages,
+            max_tokens_limit=1500 if has_images else None,  # vision-ответы не длиннее ~1500 токенов
+            db=db,
+        )
+        answer = result["content"]
+        usage = result.get("usage", {})
+    except Exception as e:
+        # Провал провайдера не должен ронять запрос с 500 — клиенту нужен внятный ответ.
+        print(f"❌ Ошибка LLM [{provider}/{model}]: {e}", flush=True)
+        llm_failed = True
+        answer = ("Не удалось получить ответ от модели. Попробуйте повторить вопрос "
+                  "или отправить его без скриншота.")
+        usage = {}
     
     # Сохраняем ответ в БД
     if chat_repo and db_session:
@@ -525,7 +534,7 @@ async def process_chat(
         "sources": sources,
         "provider": provider,
         "model": model,
-        "truncated": "⚠️" in answer,
+        "truncated": (not llm_failed) and "⚠️" in answer,
         "usage": usage,
         "program": detected_program,
         "needs_program_selection": False,

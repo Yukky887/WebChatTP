@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box, Card, CardContent, Chip, Typography, TextField, Button,
   Select, MenuItem, FormControl, InputLabel, Alert, CircularProgress,
-  Tooltip, IconButton,
+  Tooltip, IconButton, Dialog, DialogContent,
 } from '@mui/material';
 import {
   Send as SendIcon, Refresh as RefreshIcon, Close as CloseIcon,
@@ -76,7 +76,7 @@ const SessionRow: React.FC<{
 );
 
 /** Сообщение транскрипта */
-const TranscriptMsg: React.FC<{ m: ClientChatMessage }> = ({ m }) => {
+const TranscriptMsg: React.FC<{ m: ClientChatMessage; onPreview: (src: string) => void }> = ({ m, onPreview }) => {
   const isUser = m.role === 'user';
   const isOperator = m.role === 'operator';
   const bg = isUser ? '#4f5bd5' : isOperator ? '#e8f5e9' : '#f5f5f7';
@@ -130,7 +130,7 @@ const TranscriptMsg: React.FC<{ m: ClientChatMessage }> = ({ m }) => {
                 src={src}
                 alt="скриншот клиента"
                 title="Открыть скриншот"
-                onClick={() => window.open(src, '_blank')}
+                onClick={() => onPreview(src)}
                 sx={{
                   width: 110, height: 80, objectFit: 'cover', borderRadius: 1,
                   cursor: 'zoom-in', border: '1px solid rgba(255,255,255,.4)', bgcolor: 'white',
@@ -163,6 +163,7 @@ export const ClientChatsPanel: React.FC = () => {
   // Выбранная сессия
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ClientChatMessage[]>([]);
+  const [preview, setPreview] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
@@ -417,7 +418,7 @@ export const ClientChatsPanel: React.FC = () => {
                       Сообщений пока нет
                     </Typography>
                   ) : (
-                    detail.map((m) => <TranscriptMsg key={m.id} m={m} />)
+                    detail.map((m) => <TranscriptMsg key={m.id} m={m} onPreview={setPreview} />)
                   )}
                 </Box>
 
@@ -455,6 +456,19 @@ export const ClientChatsPanel: React.FC = () => {
           </Box>
         </Box>
       </CardContent>
+
+      {/* Chrome блокирует window.open(data:...) — показываем превью внутри админки */}
+      <Dialog open={!!preview} onClose={() => setPreview(null)} maxWidth="md" fullWidth
+        slotProps={{ paper: { sx: { bgcolor: '#111', position: 'relative' } } }}>
+        <IconButton aria-label="Закрыть" onClick={() => setPreview(null)}
+          sx={{ position: 'absolute', top: 6, right: 6, color: '#fff', zIndex: 1 }}>
+          <CloseIcon />
+        </IconButton>
+        <DialogContent sx={{ p: 1, display: 'flex', justifyContent: 'center' }}>
+          <Box component="img" src={preview || ''} alt="Скриншот клиента"
+            sx={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', display: 'block' }} />
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

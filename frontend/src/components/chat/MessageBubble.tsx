@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Paper, Typography, IconButton, Tooltip, Avatar, Collapse } from '@mui/material';
-import { Person as PersonIcon, Psychology as AIIcon, ContentCopy as CopyIcon, ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
+import { Box, Paper, Typography, IconButton, Tooltip, Avatar, Collapse, Dialog, DialogContent } from '@mui/material';
+import { Person as PersonIcon, Psychology as AIIcon, ContentCopy as CopyIcon, ExpandMore as ExpandMoreIcon, Close as CloseIcon } from '@mui/icons-material';
 import { Message, Source } from '../../types';
 import { SourceChip } from './SourceChip';
 import { MarkdownRenderer } from '../common/MarkdownRenderer';
@@ -17,10 +17,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onSuggestionClick,
 }) => {
   const isUser = message.role === 'user';
+  const [preview, setPreview] = useState<string | null>(null);
 
   if (isUser) {
     // ========== СООБЩЕНИЕ ПОЛЬЗОВАТЕЛЯ ==========
     return (
+      <>
       <Box sx={{ 
         mb: 2.5,
         display: 'flex',
@@ -46,7 +48,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   component="img"
                   src={src}
                   alt="вложение"
-                  onClick={() => window.open(src, '_blank')}
+                  onClick={() => setPreview(src)}
                   sx={{
                     width: 120,
                     height: 90,
@@ -71,6 +73,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </Typography>
         </Box>
       </Box>
+
+      {/* Chrome блокирует window.open(data:...) — показываем встроенным окном */}
+      <Dialog open={!!preview} onClose={() => setPreview(null)} maxWidth="md" fullWidth
+        slotProps={{ paper: { sx: { bgcolor: '#111', position: 'relative' } } }}>
+        <IconButton aria-label="Закрыть" onClick={() => setPreview(null)}
+          sx={{ position: 'absolute', top: 6, right: 6, color: '#fff', zIndex: 1 }}>
+          <CloseIcon />
+        </IconButton>
+        <DialogContent sx={{ p: 1, display: 'flex', justifyContent: 'center' }}>
+          <Box component="img" src={preview || ''} alt="вложение"
+            sx={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', display: 'block' }} />
+        </DialogContent>
+      </Dialog>
+      </>
     );
   }
 

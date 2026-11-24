@@ -1,5 +1,7 @@
 # backend/llm_providers.py
 """Провайдеры LLM — работа с API"""
+import asyncio
+
 import httpx
 from typing import Dict, List
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,25 +110,39 @@ async def _openai_chat(client, model, messages, settings, provider_id: str, max_
     if provider_id == "llamacpp":
         payload["stop"] = ["<end_of_turn>", "<eos>"]
     
-    resp = await client.post("/chat/completions", json=payload)
-    
-    if resp.status_code == 200:
-        data = resp.json()
-        content = data["choices"][0]["message"]["content"]
-        usage = data.get("usage", {})
-        fr = data["choices"][0].get("finish_reason", "")
-        
-        if fr == "length":
-            content += "\n\n⚠️ *Ответ обрезан.*"
-        
-        return {
-            "content": content,
-            "usage": {
-                "prompt_tokens": usage.get("prompt_tokens", 0),
-                "completion_tokens": usage.get("completion_tokens", 0),
-                "total_tokens": usage.get("total_tokens", 0),
-                "cost": usage.get("cost", 0),
-            },
-            "finish_reason": fr,
-        }
-    raise Exception(f"{provider_id} error: {resp.status_code} - {resp.text[:200]}")
+    # RouterAI иногда отвечает HTTP 200 без choices (ошибка внутри провайдера):
+    # раньше это било KeyError и возвращало клиенту 500. Логируем тело и повторяем.
+    last_error = ""
+    for attempt in range(2):
+        resp = await client.post("/chat/completions", json=payload)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except Exception:
+                data = {}
+            if data.get("choices"):
+                content = data["choices"][0].get("message", {}).get("content", "")
+                usage = data.get("usage", {})
+                fr = data["choices"][0].get("finish_reason", "")
+
+                if fr == "length":
+                    content += "\n\n⚠️ *Ответ обрезан.*"
+
+                return {
+                    "content": content,
+                    "usage": {
+                        "prompt_tokens": usage.get("prompt_tokens", 0),
+                        "completion_tokens": usage.get("completion_tokens", 0),
+                        "total_tokens": usage.get("total_tokens", 0),
+                        "cost": usage.get("cost", 0),
+                    },
+                    "finish_reason": fr,
+                }
+            last_error = str(data.get("error") or data)[:500]
+        else:
+            last_error = f"{resp.status_code} - {resp.text[:300]}"
+        print(f"⚠️ [{provider_id}] ответ без choices (попытка {attempt + 1}/2): {last_error}",
+              flush=True)
+        if attempt == 0:
+            await asyncio.sleep(1)
+    raise RuntimeError(f"{provider_id} error: {last_error}")
