@@ -116,14 +116,48 @@ async def search_all(
             if result:
                 results.append(result)
     
+    # Заявки ТП: не подмешиваем чужой продукт (intellect vs resource)
+    if program in ("intellect", "resource"):
+        before = sum(1 for r in results if r.get("type") == "ticket")
+        results = [
+            r for r in results
+            if r.get("type") != "ticket" or _ticket_matches_program(r, program)
+        ]
+        dropped = before - sum(1 for r in results if r.get("type") == "ticket")
+        if dropped:
+            print(f"🧹 Отфильтровано заявок другого продукта: {dropped} (program={program})")
+
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
-    
+
     tickets = sum(1 for r in results if r.get("type") == "ticket")
     docs = sum(1 for r in results if r.get("type") == "documentation")
     bitrix = sum(1 for r in results if r.get("type") == "bitrix")
     print(f"✅ Итого: {tickets} заявок + {docs} документации + {bitrix} bitrix-чанков")
-    
+
     return results
+
+
+def _ticket_matches_program(ticket: Dict, program: Optional[str]) -> bool:
+    """Фильтр заявок ТП по продукту.
+
+    В keywords заявки указан продукт (parts.intellect / parts.resource).
+    Если вопрос по одному продукту, заявки явно другого продукта не подмешиваем.
+    Неоднозначные/без маркера — оставляем, чтобы не терять полезный контекст.
+    """
+    if not program:
+        return True
+    prog = str(program).lower()
+    if prog not in ("intellect", "resource"):
+        return True
+    keywords = ticket.get("keywords") or []
+    ks = " ".join(str(k).lower() for k in keywords)
+    has_i = "parts.intellect" in ks or "part.intellect" in ks
+    has_r = "parts.resource" in ks or "part.resource" in ks
+    if prog == "intellect" and has_r and not has_i:
+        return False
+    if prog == "resource" and has_i and not has_r:
+        return False
+    return True
 
 
 def _process_point(collection_type: str, point) -> Dict:
